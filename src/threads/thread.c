@@ -58,6 +58,8 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
+int64_t next_tick_to_awake = INT64_MAX; /*next tick to awake*/
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
@@ -587,3 +589,55 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/*
+user-defined function
+*/
+
+void thread_sleep(int64_t ticks){
+  struct thread *cur = thread_current ();
+  enum intr_level old_level;
+  
+  ASSERT (!intr_context ());
+
+  old_level = intr_disable ();
+  if(cur!=idle_thread){
+    cur->status = THREAD_BLOCKED;
+    cur->wakeup_tick=ticks;
+    list_push_back (&sleep_queue, &cur->elem);
+    update_next_tick_to_awake(ticks);
+    schedule ();
+  }
+  intr_set_level (old_level);
+
+}
+void thread_awake(int64_t ticks){
+  //
+  next_tick_to_awake = INT64_MAX;
+  struct list_elem* e = list_begin(&sleep_queue);
+  
+  while (e != list_end(&sleep_queue)){
+    ASSERT(e != NULL);
+    struct thread* t = list_entry(e, struct thread, elem);
+    /*
+    if wakeup tick is same or smaller then current time
+    remove element from ready list
+    */
+    if(t->wakeup_tick <= ticks){
+      e=list_remove(e);
+      thread_unblock(t);
+    }else{
+      //update awake time
+      update_next_tick_to_awake(ticks);
+      e = list_next(e);
+    }
+  }
+}
+void update_next_tick_to_awake(int64_t ticks){
+  if (next_tick_to_awake > ticks){
+      next_tick_to_awake = ticks;
+  }
+}
+int64_t get_next_tick_to_awake(void){
+  return next_tick_to_awake;
+}
