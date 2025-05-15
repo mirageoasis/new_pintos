@@ -208,7 +208,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  if (priority < thread_get_priority()){
+  if (priority > thread_get_priority()){
     thread_yield();
   }
   return tid;
@@ -323,7 +323,6 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) 
     list_insert_ordered(&ready_list, &cur->elem, cmp_priority, NULL);
-  //list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -351,6 +350,8 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  // compare now thread and ready queue priority
+  test_max_priority();
 }
 
 /* Returns the current thread's priority. */
@@ -651,7 +652,17 @@ int64_t get_next_tick_to_awake(void){
 }
 
 void test_max_priority (void){
-  return;
+  // if ready list empty just return
+  if (list_empty(&ready_list))
+    return;
+  
+  //compare with max priority thread on ready list
+  // idle thread's filtering is already in thread_yield
+  struct thread* max_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
+  if(max_priority_thread->priority > thread_get_priority()){
+    thread_yield();
+  }
+
 }
 
 bool cmp_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED){
