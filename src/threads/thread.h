@@ -149,4 +149,12 @@ void thread_awake(int64_t ticks); /* remove thread from sleep queue */
 void update_next_tick_to_awake(int64_t ticks); /*save least thread's tick to awake*/
 int64_t get_next_tick_to_awake(void); /* return thread.c's next_tick_to_awake */
 
+/* 
+schedule running thread and highest prioirty thread by comparing priroirty 
+*/
+void test_max_priority (void);
+
+/* compare element a and b*/
+bool cmp_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED);
+
 #endif /* threads/thread.h */

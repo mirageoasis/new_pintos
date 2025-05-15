@@ -189,6 +189,7 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
+  t->priority = priority;
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -207,7 +208,9 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  if (priority < thread_get_priority()){
+    thread_yield();
+  }
   return tid;
 }
 
@@ -244,7 +247,11 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  /*
+  fix here to sort as priority
+  */
+  list_insert_ordered(&ready_list, &(t->elem), cmp_priority, NULL);
+  //list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -315,7 +322,8 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered(&ready_list, &cur->elem, cmp_priority, NULL);
+  //list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -640,4 +648,15 @@ void update_next_tick_to_awake(int64_t ticks){
 }
 int64_t get_next_tick_to_awake(void){
   return next_tick_to_awake;
+}
+
+void test_max_priority (void){
+  return;
+}
+
+bool cmp_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED){
+  
+  struct thread* first = list_entry(a, struct thread, elem);
+  struct thread* second = list_entry(b, struct thread, elem);
+  return (first->priority) > (second->priority);
 }
