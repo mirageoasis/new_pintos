@@ -90,6 +90,8 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    int64_t wakeup_tick; /*user-defined variable to set wake up tick for blocked thread*/
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -137,5 +139,14 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/*
+user-defined function
+*/
+
+void thread_sleep(int64_t ticks); /* make running thread to sleep */
+void thread_awake(int64_t ticks); /* remove thread from sleep queue */
+void update_next_tick_to_awake(int64_t ticks); /*save least thread's tick to awake*/
+int64_t get_next_tick_to_awake(void); /* return thread.c's next_tick_to_awake */
 
 #endif /* threads/thread.h */
