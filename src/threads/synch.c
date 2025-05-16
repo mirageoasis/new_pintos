@@ -308,7 +308,9 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+  // fixed to sorted insert to implement priority
+  list_insert_ordered(&cond->waiters, &waiter.elem, cmp_sem_priority, NULL);
+  
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -330,6 +332,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
+    list_sort(&(cond->waiters), cmp_sem_priority, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
 }
@@ -356,7 +359,7 @@ user-defined function
 
 /*
 compare elements in semaphore list
-return true if a is larger then b ellse 
+return true if a is larger then b else false
 */
 bool cmp_sem_priority(
   const struct list_elem *a,
@@ -366,6 +369,15 @@ bool cmp_sem_priority(
   struct semaphore_elem *sa = list_entry(a,struct semaphore_elem, elem);
   struct semaphore_elem *sb = list_entry(b,struct semaphore_elem, elem);
 
-  //return sa->priority > sb->priority;
-  return true;
+  if (list_empty(&((sa->semaphore).waiters))) return false;
+  if (list_empty(&((sb->semaphore).waiters))) return true;
+
+  // list thread that is only size one
+  struct list_elem* a_first = list_front(&((sa->semaphore).waiters));
+  struct list_elem* b_first = list_front(&((sb->semaphore).waiters));
+  
+  struct thread *ta = list_entry(a_first, struct thread, elem);
+  struct thread *tb = list_entry(b_first, struct thread, elem);
+
+  return ta->priority > tb->priority;
 }
