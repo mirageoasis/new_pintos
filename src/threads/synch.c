@@ -309,7 +309,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   
   sema_init (&waiter.semaphore, 0);
   // fixed to sorted insert to implement priority
-  list_insert_ordered(&cond->waiters, &waiter.elem, cmp_sem_priority, NULL);
+  list_push_front(&cond->waiters, &waiter.elem);
   
   lock_release (lock);
   sema_down (&waiter.semaphore);
@@ -332,6 +332,10 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) 
+    /*
+    this will prevent problem associated with insert in 
+    cond->waiters before init
+    */
     list_sort(&(cond->waiters), cmp_sem_priority, NULL);
     sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
@@ -369,8 +373,8 @@ bool cmp_sem_priority(
   struct semaphore_elem *sa = list_entry(a,struct semaphore_elem, elem);
   struct semaphore_elem *sb = list_entry(b,struct semaphore_elem, elem);
 
-  if (list_empty(&((sa->semaphore).waiters))) return false;
-  if (list_empty(&((sb->semaphore).waiters))) return true;
+  //if (list_empty(&((sa->semaphore).waiters))) return false;
+  //if (list_empty(&((sb->semaphore).waiters))) return true;
 
   // list thread that is only size one
   struct list_elem* a_first = list_front(&((sa->semaphore).waiters));
