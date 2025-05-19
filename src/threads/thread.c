@@ -347,8 +347,9 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  thread_current ()->init_priority = new_priority;
   // compare now thread and ready queue priority
+  refresh_priority();
   test_max_priority();
 }
 
@@ -477,6 +478,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+
+  /*init datastructure for priority donation*/
+  t->init_priority = priority;
+  list_init(&(t->donations));
+  t->wait_on_lock=NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -668,4 +674,73 @@ bool cmp_priority (const struct list_elem *a,const struct list_elem *b,void *aux
   struct thread* first = list_entry(a, struct thread, elem);
   struct thread* second = list_entry(b, struct thread, elem);
   return (first->priority) > (second->priority);
+}
+
+bool cmp_lock_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED){
+  // sort for list elem which hold thread init priority as sort
+  ASSERT(a != NULL)
+  ASSERT(b != NULL)
+  struct thread* first = list_entry(a, struct thread, donation_elem);
+  struct thread* second = list_entry(b, struct thread, donation_elem);
+  ASSERT(first != NULL)
+  ASSERT(second != NULL)
+  return (first->priority) > (second->priority);
+}
+
+void donate_priority(){
+  /* implements nested priority donation .
+  iterate through group of thread by depth 8 which holds lock
+  see nested donation at page 227 at pintos slide
+   */
+  struct thread* cur = thread_current();
+  int priority_to_donate = cur->priority;
+
+  for(int i = 0; i < 8; i++){
+    if(cur->wait_on_lock == NULL){
+      break;
+    }
+    struct thread *holder = cur->wait_on_lock->holder;
+    holder->priority = priority_to_donate;
+    cur = holder;
+  }
+}
+void remove_with_lock(struct lock *lock){
+    /* 
+    iterate throgh donations list and remove list_element
+    which holds lock to remove 
+    */
+
+  struct thread* cur = thread_current();
+  struct list_elem* e;
+  for(e = list_begin(&(cur->donations)); e != list_end(&(cur->donations)); e = list_next(e)){
+    struct thread* t = list_entry(e, struct thread, donation_elem);
+    ASSERT(t!= NULL)
+    ASSERT(t!=list_tail(&cur->donations));
+    if(t->wait_on_lock== lock){
+      list_remove(&(t->donation_elem));
+    }
+  }
+}
+void refresh_priority(){
+  struct thread* cur = thread_current();
+  /* switch current prirority to priority before donations*/
+  cur->priority = cur->init_priority;
+  //ASSERT(cur -> priority != NULL)
+  //ASSERT(cur -> init_priority != NULL)
+  /* 
+  compare largest priority in donations list
+  and priority of current thread and set 
+  larger priority to current thread
+  */
+  if(list_empty(&(cur->donations)))
+    return;
+  
+  list_sort (&cur->donations, cmp_lock_priority, NULL);
+  struct thread* t = list_entry(list_front(&(cur->donations)), struct thread, donation_elem);
+  ASSERT(t != NULL)
+  ASSERT(t->init_priority != NULL)
+  ASSERT(t->priority != NULL)
+  if(t->priority > cur->priority){
+    cur->priority=t->priority;
+  }
 }

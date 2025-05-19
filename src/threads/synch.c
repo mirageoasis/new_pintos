@@ -209,7 +209,24 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+/* if another thread is holding lock do the following */
+if(lock->holder != NULL){
+  struct thread* cur = thread_current();
+  struct thread* holder_thread = lock->holder;
+  struct list* holder_donations = &(holder_thread->donations);
+  /* save current lock's address on wait_on_lock 
+  which current thread is trying to hold*/
+  cur->wait_on_lock = lock;
+  ASSERT(holder_donations != NULL)
+  list_insert_ordered(holder_donations, &(cur->donation_elem), cmp_lock_priority, NULL);
+  /* call donate_priority() for priority donation  */
+  donate_priority();
+}
+
   sema_down (&lock->semaphore);
+  thread_current()->wait_on_lock = NULL;
+
+  /* update lock holder after thread holds the lock */
   lock->holder = thread_current ();
 }
 
@@ -245,6 +262,10 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->holder = NULL;
+
+  remove_with_lock(lock);
+  refresh_priority();
+
   sema_up (&lock->semaphore);
 }
 

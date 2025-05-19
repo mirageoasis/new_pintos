@@ -88,6 +88,12 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int init_priority;                  /* Init Priority. for priority donation */
+    
+    struct lock *wait_on_lock; /* save address of locks which this threads holds*/
+    struct list donations;                  /* list of donation_elem which points which I received prioirty donation*/
+    struct list_elem donation_elem;                  /* pointer for donations */
+    
     struct list_elem allelem;           /* List element for all threads list. */
 
     int64_t wakeup_tick; /*user-defined variable to set wake up tick for blocked thread*/
@@ -156,5 +162,13 @@ void test_max_priority (void);
 
 /* compare element a and b*/
 bool cmp_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED);
+
+
+/*user-defined function for priority donation*/
+void donate_priority(void);
+void remove_with_lock(struct lock *lock);
+void refresh_priority(void);
+
+bool cmp_lock_priority (const struct list_elem* ,const struct list_elem* ,void*);
 
 #endif /* threads/thread.h */
