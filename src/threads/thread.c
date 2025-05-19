@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -65,6 +66,11 @@ int64_t next_tick_to_awake = INT64_MAX; /*next tick to awake*/
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+
+#define NICE_DEFAULT 0
+#define RECENT_CPU_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -76,6 +82,8 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+int load_avg;
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -116,6 +124,7 @@ thread_start (void)
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
+  load_avg = LOAD_AVG_DEFAULT;
 
   /* Start preemptive thread scheduling. */
   intr_enable ();
@@ -347,6 +356,8 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  ASSERT(thread_mlfqs != true)
+  
   thread_current ()->init_priority = new_priority;
   // compare now thread and ready queue priority
   refresh_priority();
@@ -365,6 +376,10 @@ void
 thread_set_nice (int nice UNUSED) 
 {
   /* Not yet implemented. */
+  intr_disable ();
+  //TODO: thread prirority reschedule
+
+  intr_enable ();
 }
 
 /* Returns the current thread's nice value. */
@@ -372,7 +387,7 @@ int
 thread_get_nice (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
@@ -380,7 +395,7 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return load_avg * 100;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -388,7 +403,7 @@ int
 thread_get_recent_cpu (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return (thread_current() -> recent_cpu) * 100;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -483,6 +498,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->init_priority = priority;
   list_init(&(t->donations));
   t->wait_on_lock=NULL;
+
+  /*init mlfq related data structure*/
+  t->nice = NICE_DEFAULT;
+  t->recent_cpu = RECENT_CPU_DEFAULT;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -743,4 +762,46 @@ void refresh_priority(){
   if(t->priority > cur->priority){
     cur->priority=t->priority;
   }
+}
+
+/*
+function for mlfq
+*/
+void mlfqs_priority (struct thread *t)
+{
+  /* 해당 스레드가 idle_thread 가 아닌지 검사 */
+  if(t==idle_thread){return;}
+  /*priority계산식을 구현 (fixed_point.h의 계산함수 이용)*/
+  // first sub_mixed
+  // (recent_cpu/4) - nice/2
+  int recent_4 = div_fp(t->recent_cpu, 4);
+  int n_2 = int_to_fp(2 * t->nice);
+
+  int recent_4_n_2 = 1;
+
+
+  return sub_mixed(PRI_MAX, recent_4_n_2);
+}
+
+void mlfqs_recent_cpu (struct thread *t)
+{
+  /* 해당 스레드가 idle_thread 가 아닌지 검사 */
+  ASSERT(t!=idle_thread)
+  /*recent_cpu계산식을 구현 (fixed_point.h의 계산함수 이용)*/
+  return;
+}
+
+void mlfqs_load_avg (void){
+  /* load_avg계산식을 구현 (fixed_point.h의 계산함수 이용) */
+  /* load_avg 는 0 보다 작아질 수 없다.*/
+  return;
+}
+void mlfqs_increment (void){
+  /* 해당 스레드가 idle_thread 가 아닌지 검사 */
+  /* 현재 스레드의 recent_cpu 값을 1증가 시킨다. */
+  return;
+}
+void mlfqs_recalc (void){
+  /* 모든 thread의 recent_cpu와 priority값 재계산 한다. */
+  return;
 }

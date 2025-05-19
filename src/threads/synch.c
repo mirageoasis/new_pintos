@@ -213,14 +213,17 @@ lock_acquire (struct lock *lock)
 if(lock->holder != NULL){
   struct thread* cur = thread_current();
   struct thread* holder_thread = lock->holder;
-  struct list* holder_donations = &(holder_thread->donations);
   /* save current lock's address on wait_on_lock 
   which current thread is trying to hold*/
   cur->wait_on_lock = lock;
-  ASSERT(holder_donations != NULL)
-  list_insert_ordered(holder_donations, &(cur->donation_elem), cmp_lock_priority, NULL);
-  /* call donate_priority() for priority donation  */
-  donate_priority();
+  // priority donation is not compatible with mlfq
+  if(!thread_mlfqs){
+    struct list* holder_donations = &(holder_thread->donations);
+    ASSERT(holder_donations != NULL)
+    list_insert_ordered(holder_donations, &(cur->donation_elem), cmp_lock_priority, NULL);
+    /* call donate_priority() for priority donation  */
+    donate_priority();
+  }
 }
 
   sema_down (&lock->semaphore);
@@ -405,4 +408,20 @@ bool cmp_sem_priority(
   struct thread *tb = list_entry(b_first, struct thread, elem);
 
   return ta->priority > tb->priority;
+}
+
+void mlfqs_priority (struct thread *t){
+  return;
+}
+void mlfqs_recent_cpu (struct thread *t){
+  return;
+}
+void mlfqs_load_avg (void){
+  return;
+}
+void mlfqs_increment (void){
+  return;
+}
+void mlfqs_recalc (void){
+  return;
 }

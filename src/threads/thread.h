@@ -101,6 +101,9 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+   /*data for mlfq*/
+    int nice;
+    int recent_cpu;
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -170,5 +173,12 @@ void remove_with_lock(struct lock *lock);
 void refresh_priority(void);
 
 bool cmp_lock_priority (const struct list_elem* ,const struct list_elem* ,void*);
+
+/*user-defined function for multi-level feedback queue*/
+void mlfqs_priority (struct thread *t);
+void mlfqs_recent_cpu (struct thread *t);
+void mlfqs_load_avg (void);
+void mlfqs_increment (void);
+void mlfqs_recalc (void);
 
 #endif /* threads/thread.h */
