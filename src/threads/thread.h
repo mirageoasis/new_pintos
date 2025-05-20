@@ -88,11 +88,22 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int init_priority;                  /* Init Priority. for priority donation */
+    
+    struct lock *wait_on_lock; /* save address of locks which this threads holds*/
+    struct list donations;                  /* list of donation_elem which points which I received prioirty donation*/
+    struct list_elem donation_elem;                  /* pointer for donations */
+    
     struct list_elem allelem;           /* List element for all threads list. */
+
+    int64_t wakeup_tick; /*user-defined variable to set wake up tick for blocked thread*/
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+   /*data for mlfq*/
+    int nice;
+    int recent_cpu;
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -137,5 +148,37 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/*
+user-defined function
+*/
+
+void thread_sleep(int64_t ticks); /* make running thread to sleep */
+void thread_awake(int64_t ticks); /* remove thread from sleep queue */
+void update_next_tick_to_awake(int64_t ticks); /*save least thread's tick to awake*/
+int64_t get_next_tick_to_awake(void); /* return thread.c's next_tick_to_awake */
+
+/* 
+schedule running thread and highest prioirty thread by comparing priroirty 
+*/
+void test_max_priority (void);
+
+/* compare element a and b*/
+bool cmp_priority (const struct list_elem *a,const struct list_elem *b,void *aux UNUSED);
+
+
+/*user-defined function for priority donation*/
+void donate_priority(void);
+void remove_with_lock(struct lock *lock);
+void refresh_priority(void);
+
+bool cmp_lock_priority (const struct list_elem* ,const struct list_elem* ,void*);
+
+/*user-defined function for multi-level feedback queue*/
+void mlfqs_priority (struct thread *t);
+void mlfqs_recent_cpu (struct thread *t);
+void mlfqs_load_avg (void);
+void mlfqs_increment (void);
+void mlfqs_recalc (void);
 
 #endif /* threads/thread.h */
