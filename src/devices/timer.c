@@ -173,18 +173,23 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
-  if(get_next_tick_to_awake() <= ticks){
-    thread_awake(ticks);
-  }
   thread_tick ();
 
-  if(thread_mlfqs){
-    /* mlfqs 스케줄러일 경우
-    timer_interrupt 가 발생할때 마다 recuent_cpu 1증가,
-    1초마다 load_avg, recent_cpu, priority 계산,
-    매 4tick마다 priority 계산 */ 
-    
+  if(thread_mlfqs){ 
+    int64_t ticks=timer_ticks();
 
+    mlfqs_increment();
+    if(ticks % TIMER_FREQ==0){
+      mlfqs_load_avg();
+      mlfqs_recalc_recent_cpu();
+    }
+    if(ticks%4==0){
+      mlfqs_recalc_priority();
+    }
+  }
+
+  if(get_next_tick_to_awake() <= ticks){
+    thread_awake(ticks);
   }
 }
 

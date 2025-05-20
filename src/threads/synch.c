@@ -265,9 +265,10 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->holder = NULL;
-
-  remove_with_lock(lock);
-  refresh_priority();
+  if(!thread_mlfqs){
+    remove_with_lock(lock);
+    refresh_priority();
+  }
 
   sema_up (&lock->semaphore);
 }
@@ -408,20 +409,4 @@ bool cmp_sem_priority(
   struct thread *tb = list_entry(b_first, struct thread, elem);
 
   return ta->priority > tb->priority;
-}
-
-void mlfqs_priority (struct thread *t){
-  return;
-}
-void mlfqs_recent_cpu (struct thread *t){
-  return;
-}
-void mlfqs_load_avg (void){
-  return;
-}
-void mlfqs_increment (void){
-  return;
-}
-void mlfqs_recalc (void){
-  return;
 }
