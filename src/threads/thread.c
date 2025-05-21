@@ -684,7 +684,7 @@ void test_max_priority (void){
   //compare with max priority thread on ready list
   // idle thread's filtering is already in thread_yield
   struct thread* max_priority_thread = list_entry(list_front(&ready_list), struct thread, elem);
-  if(max_priority_thread->priority > thread_get_priority()){
+  if(!intr_context() && max_priority_thread->priority > thread_get_priority()){
     thread_yield();
   }
 
