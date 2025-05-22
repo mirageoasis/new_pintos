@@ -53,25 +53,41 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  char* argument_name_array[UINT8_MAX];
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+
+  int argument_size = 0;
+  // make other functions to read first arguemnt of file name
+  char* copy_file_name = (char*) malloc(sizeof(char) * (strlen(file_name) + 1));
+  strlcpy(copy_file_name, file_name, strlen(file_name) + 1);
+  
+  replace_white_space_to_null(copy_file_name, argument_name_array, &argument_size);
+
+  success = load (copy_file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success){
+    free(copy_file_name);
     thread_exit ();
-
+  }
+  // initialize value of stack
+  // gives me error
+  argument_stack(argument_name_array, argument_size, &if_.esp);
+  free(copy_file_name);
+  //printf("we have hex_dump\n");
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  //hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp ,true);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -88,6 +104,10 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  while(1){
+
+  }
+  
   return -1;
 }
 
@@ -304,7 +324,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
-
+  
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
@@ -462,4 +482,45 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+
+/* push argument to stack */
+void argument_stack(char **parse , int count , void **esp){
+  /* push parsed strings start address(string) */
+  /* push argument in right to left order*/
+  for(int i = count-1; i > -1; i--){
+    // push string into stack
+    char* temp = parse[i];
+    printf("string %s\n", parse[i]);
+    for(int j = 0; j < strlen(temp); j++){
+      *(char*)esp=temp[j];
+      printf("%c", temp[j]);
+      *esp-=1;
+    }
+    *esp-=1;
+  }
+
+  /* parse[count] must be NULL */
+
+  /* 프로그램 이름 및 인자 주소들 push */
+  /* argv (문자열을 가리키는 주소들의 배열을 가리킴) push*/
+  /* argc (문자열의 개수 저장) push */
+  /* fake address(0) 저장 */ 
+}
+
+void replace_white_space_to_null(char* file_name, char** result, int* file_name_size) {
+    char* file_name_ptr;
+    char* save_ptr = NULL;
+    int count = 0;
+
+    file_name_ptr = strtok_r(file_name, " ", &save_ptr);
+    while (file_name_ptr != NULL) {
+        ASSERT(count < UINT8_MAX - 1);
+        printf("element: %s\n", file_name_ptr);
+        result[count++] = file_name_ptr;
+        file_name_ptr = strtok_r(NULL, " ", &save_ptr);
+    }
+    result[count] = NULL;
+    *file_name_size = count;
 }
