@@ -18,6 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+# define MAX_ARG_COUNT UINT8_MAX
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -76,10 +78,10 @@ start_process (void *file_name_)
     free(copy_file_name);
     thread_exit ();
   }
+  
   // initialize value of stack
-  // gives me error
   argument_stack(argument_name_array, argument_size, &if_.esp);
-  free(copy_file_name);
+  hex_dump(if_.esp, if_.esp, 100 ,true);
   //printf("we have hex_dump\n");
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -87,7 +89,7 @@ start_process (void *file_name_)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-  //hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp ,true);
+  free(copy_file_name);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -489,24 +491,42 @@ install_page (void *upage, void *kpage, bool writable)
 void argument_stack(char **parse , int count , void **esp){
   /* push parsed strings start address(string) */
   /* push argument in right to left order*/
+  // *esp = address value
+  // push argument string
+  uintptr_t pointer_arr[MAX_ARG_COUNT];
+  push_argument_string_to_stack(parse, count, esp, pointer_arr);
+  push_argument_address_to_stack(count, esp, pointer_arr);
+  
+  // argument adress 
+  *esp-=sizeof(uintptr_t);
+  memcpy(*esp, &pointer_arr[0], sizeof(uintptr_t));
+  
+  // number of argument
+  *esp-=sizeof(uintptr_t);
+  memcpy(*esp, &count, sizeof(uintptr_t));
+
+  //fake return address
+  *esp-=sizeof(uintptr_t);
+  **((uintptr_t**)esp) = 0;
+}
+
+void push_argument_string_to_stack(char ** parse, int count, void **esp, uintptr_t* pointer_arr){
+  pointer_arr[count]=0;
   for(int i = count-1; i > -1; i--){
     // push string into stack
     char* temp = parse[i];
-    printf("string %s\n", parse[i]);
-    for(int j = 0; j < strlen(temp); j++){
-      *(char*)esp=temp[j];
-      printf("%c", temp[j]);
-      *esp-=1;
-    }
-    *esp-=1;
+    pointer_arr[i]=*esp;
+    *esp-=(strlen(temp)+1);
+    strlcpy(*esp, temp, strlen(temp)+1);
   }
+  *esp = (void*)ROUND_DOWN((uintptr_t)*esp, sizeof(uintptr_t));
+}
 
-  /* parse[count] must be NULL */
-
-  /* 프로그램 이름 및 인자 주소들 push */
-  /* argv (문자열을 가리키는 주소들의 배열을 가리킴) push*/
-  /* argc (문자열의 개수 저장) push */
-  /* fake address(0) 저장 */ 
+void push_argument_address_to_stack(int count, void** esp, uintptr_t* pointer_arr){
+  for(int i = count; i > -1; i--){
+    *esp-=sizeof(uintptr_t);
+    memcpy(*esp, &pointer_arr[i], sizeof(uintptr_t));
+  }
 }
 
 void replace_white_space_to_null(char* file_name, char** result, int* file_name_size) {
@@ -516,8 +536,7 @@ void replace_white_space_to_null(char* file_name, char** result, int* file_name_
 
     file_name_ptr = strtok_r(file_name, " ", &save_ptr);
     while (file_name_ptr != NULL) {
-        ASSERT(count < UINT8_MAX - 1);
-        printf("element: %s\n", file_name_ptr);
+        ASSERT(count < MAX_ARG_COUNT - 1);
         result[count++] = file_name_ptr;
         file_name_ptr = strtok_r(NULL, " ", &save_ptr);
     }
