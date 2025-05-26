@@ -81,7 +81,7 @@ start_process (void *file_name_)
   
   // initialize value of stack
   argument_stack(argument_name_array, argument_size, &if_.esp);
-  hex_dump(if_.esp, if_.esp, 100 ,true);
+  //hex_dump(if_.esp, if_.esp, 100 ,true);
   //printf("we have hex_dump\n");
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -107,9 +107,8 @@ int
 process_wait (tid_t child_tid UNUSED) 
 {
   while(1){
-
+    
   }
-  
   return -1;
 }
 
