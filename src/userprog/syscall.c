@@ -6,6 +6,8 @@
 #include "threads/thread.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+#include "threads/vaddr.h"
+#include "userprog/pagedir.h"
 #include <lib/kernel/stdio.h>
 #include <filesys/filesys.h>
 
@@ -179,4 +181,14 @@ int read(int fd, void *buffer, unsigned length){
 
 pid_t exec(const char *cmd_line){
   return process_execute(cmd_line);
+}
+
+void check_address(void *addr)
+{
+  /* addr must not be null */
+  /* addr must be null */
+  /* addr must be within now process's page table list */
+  if(addr == NULL) exit(-1);
+  if(!is_user_vaddr(addr)) exit(-1);
+  if(pagedir_get_page(thread_current()->pagedir,addr) != NULL) exit(-1);
 }
