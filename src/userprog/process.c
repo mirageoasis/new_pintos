@@ -498,7 +498,7 @@ void argument_stack(char **parse , int count , void **esp){
   
   // argument adress 
   *esp-=sizeof(uintptr_t);
-  memcpy(*esp, &pointer_arr[0], sizeof(uintptr_t));
+  **(uintptr_t**)esp = *esp + sizeof(uintptr_t);
   
   // number of argument
   *esp-=sizeof(uintptr_t);
@@ -514,8 +514,9 @@ void push_argument_string_to_stack(char ** parse, int count, void **esp, uintptr
   for(int i = count-1; i > -1; i--){
     // push string into stack
     char* temp = parse[i];
-    pointer_arr[i]=*esp;
     *esp-=(strlen(temp)+1);
+    pointer_arr[i]=*esp;
+    //printf("address %p\n", *esp);
     strlcpy(*esp, temp, strlen(temp)+1);
   }
   *esp = (void*)ROUND_DOWN((uintptr_t)*esp, sizeof(uintptr_t));
