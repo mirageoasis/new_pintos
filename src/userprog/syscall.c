@@ -1,8 +1,13 @@
-#include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "devices/shutdown.h"
+#include "devices/input.h"
+#include <lib/kernel/stdio.h>
+#include <filesys/filesys.h>
 
 static void syscall_handler (struct intr_frame *);
 
@@ -19,17 +24,17 @@ syscall_handler (struct intr_frame *f UNUSED)
   uint8_t syscall_num = *((uint8_t*)(f->esp));
   switch (syscall_num) {
     case SYS_HALT:
-      printf("SYS_HALT is not implemented.\n");
+      halt();
       ASSERT(false);
       break;
 
     case SYS_EXIT:
-      printf("SYS_EXIT is not implemented.\n");
+      exit(1);
       ASSERT(false);
       break;
 
     case SYS_EXEC:
-      printf("SYS_EXEC is not implemented.\n");
+      exec("echo");
       ASSERT(false);
       break;
 
@@ -124,4 +129,54 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
   }
   thread_exit ();
+}
+
+int write (int fd, const void *buffer, unsigned length){
+  if(fd == 1){
+    putbuf(buffer, length);
+    return length;
+  }else{
+    printf("write fd without 1 is not implemented!\n");
+    ASSERT(false);
+  }
+}
+
+void halt(){
+  shutdown_power_off();
+}
+
+void exit(int status){
+  struct thread* t = thread_current();
+  t->exit_status = status;
+  printf("%s: exit(%d)", t->name, t->exit_status);
+  thread_exit();
+}
+
+bool create(const char *file , unsigned initial_size)
+{
+  return filesys_create(file, initial_size);
+}
+
+bool remove(const char *file){
+  return filesys_remove(file);
+}
+
+int read(int fd, void *buffer, unsigned length){
+  if(fd == 0){
+    uint8_t character;
+    int count=0;
+    while((character = input_getc()) != NULL){
+      *(char*)buffer =character;
+      buffer+=sizeof(uint8_t);
+      count+=1;
+    }
+    return count;
+  }else{
+    printf("read with fd non-zero is not implemented!\n");
+    ASSERT(false);
+  }
+}
+
+pid_t exec(const char *cmd_line){
+  return process_execute(cmd_line);
 }

@@ -1,10 +1,13 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
-void syscall_init (void);
+#include "stdbool.h"
 
-void halt (void) NO_RETURN;
-void exit (int status) NO_RETURN;
+typedef int pid_t;
+
+void syscall_init (void);
+void halt (void);
+void exit (int status);
 pid_t exec (const char *file);
 int wait (pid_t);
 bool create (const char *file, unsigned initial_size);
