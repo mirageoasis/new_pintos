@@ -15,7 +15,7 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  hex_dump(f->esp, f->esp, 100, true);
+  //hex_dump(f->esp, f->esp, 100, true);
   uint8_t syscall_num = *((uint8_t*)(f->esp));
   switch (syscall_num) {
     case SYS_HALT:
@@ -65,7 +65,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
     case SYS_WRITE:
       printf("SYS_WRITE is not implemented.\n");
-      ASSERT(false);
+      //write();
       break;
 
     case SYS_SEEK:
