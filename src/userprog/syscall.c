@@ -190,5 +190,5 @@ void check_address(void *addr)
   /* addr must be within now process's page table list */
   if(addr == NULL) exit(-1);
   if(!is_user_vaddr(addr)) exit(-1);
-  if(pagedir_get_page(thread_current()->pagedir,addr) != NULL) exit(-1);
+  if(pagedir_get_page(thread_current()->pagedir,addr) == NULL) exit(-1);
 }
