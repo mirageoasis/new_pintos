@@ -126,6 +126,16 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf("SYS_INUMBER is not implemented.\n");
       ASSERT(false);
       break;
+    
+    case SYS_FIBO:
+      get_argument(f->esp, arg, 1);
+      f->eax = fibonacci(arg[0]);
+      break;
+    
+    case SYS_FOUR:
+      get_argument(f->esp, arg, 4);
+      f->eax = max_of_four_int(arg[0], arg[1], arg[2], arg[3]);
+      break;      
 
     default:
       exit(-1);
@@ -193,12 +203,28 @@ void check_address(void *addr)
   if(pagedir_get_page(thread_current()->pagedir,addr) == NULL) exit(-1);
 }
 
-void get_argument(void *esp, int *arg , int count)
-{
+void get_argument(void *esp, int *arg , int count){
   for(int i = 0; i < count; i++){
     uintptr_t offset = (i + 1) * sizeof(uintptr_t);
     check_address(esp + offset);
     // 값 넣어주기
     arg[i] = *(int*)(esp + offset);
   }
+}
+
+int max_of_four_int(int a, int b, int c, int d){
+  //printf("max four: %d %d %d %d\n", a, b, c, d);
+  int ret = a;
+  if (b > ret)
+    ret=b;
+  if (c > ret)
+    ret=c;
+  if (d > ret)
+    ret=d;
+  return ret;
+}
+
+int fibonacci(int n){
+  if (n == 0 || n == 1) {return 1;};
+  return fibonacci(n - 1) + n;
 }

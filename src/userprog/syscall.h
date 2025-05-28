@@ -19,5 +19,7 @@ int write (int fd, const void *buffer, unsigned length);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
+int fibonacci(int n);
+int max_of_four_int(int a, int b, int c, int d);
 
 #endif /* userprog/syscall.h */

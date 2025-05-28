@@ -20,6 +20,7 @@ examples/pwd
 examples/recursor
 examples/rm
 examples/shell
+examples/additional
 
 examples/**/*.o
 examples/**/*.a
