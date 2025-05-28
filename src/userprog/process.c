@@ -46,7 +46,6 @@ process_execute (const char *file_name)
   strlcpy(file_name_temp, file_name, strlen(file_name)+1);
 
   parsed_file_name=strtok_r(file_name_temp, " ", &save_ptr);
-
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (parsed_file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
@@ -76,7 +75,7 @@ start_process (void *file_name_)
   strlcpy(copy_file_name, file_name, strlen(file_name) + 1);
   
   replace_white_space_to_null(copy_file_name, argument_name_array, &argument_size);
-  printf("file name %s\n", copy_file_name);
+  //printf("file name %s\n", copy_file_name);
   success = load (copy_file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
@@ -88,7 +87,7 @@ start_process (void *file_name_)
   
   // initialize value of stack
   argument_stack(argument_name_array, argument_size, &if_.esp);
-  hex_dump(if_.esp, if_.esp, 100 ,true);
+  //hex_dump(if_.esp, if_.esp, 100 ,true);
   //printf("we have hex_dump\n");
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in

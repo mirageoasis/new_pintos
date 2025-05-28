@@ -23,7 +23,9 @@ static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
   //hex_dump(f->esp, f->esp, 100, true);
+  check_address(f->esp);
   uint8_t syscall_num = *((uint8_t*)(f->esp));
+  int arg[10];
   switch (syscall_num) {
     case SYS_HALT:
       halt();
@@ -31,13 +33,13 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
 
     case SYS_EXIT:
-      exit(1);
-      ASSERT(false);
+      get_argument(f->esp, arg, 1);
+      exit(arg[0]);
       break;
 
     case SYS_EXEC:
-      exec("echo");
-      ASSERT(false);
+      get_argument(f->esp, arg, 1);
+      exec((const char*)arg[0]);
       break;
 
     case SYS_WAIT:
@@ -46,13 +48,13 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
 
     case SYS_CREATE:
-      printf("SYS_CREATE is not implemented.\n");
-      ASSERT(false);
+      get_argument(f->esp, arg, 2);
+      f->eax=create((const char*) arg[0], (unsigned int) arg[1]);
       break;
 
     case SYS_REMOVE:
-      printf("SYS_REMOVE is not implemented.\n");
-      ASSERT(false);
+      get_argument(f->esp, arg, 1);
+      f->eax=remove((const char*) arg[0]);
       break;
 
     case SYS_OPEN:
@@ -66,13 +68,14 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
 
     case SYS_READ:
-      printf("SYS_READ is not implemented.\n");
+      get_argument(f->esp, arg, 3);
+      f->eax=read(arg[0], (const void *)arg[1], (unsigned int)arg[2]);
       ASSERT(false);
       break;
 
     case SYS_WRITE:
-      printf("SYS_WRITE is not implemented.\n");
-      //write();
+      get_argument(f->esp, arg, 3);
+      f->eax=write(arg[0], (const void *)arg[1], (unsigned int)arg[2]);
       break;
 
     case SYS_SEEK:
@@ -130,7 +133,6 @@ syscall_handler (struct intr_frame *f UNUSED)
       ASSERT(false);
       break;
   }
-  thread_exit ();
 }
 
 int write (int fd, const void *buffer, unsigned length){
@@ -150,7 +152,7 @@ void halt(){
 void exit(int status){
   struct thread* t = thread_current();
   t->exit_status = status;
-  printf("%s: exit(%d)", t->name, t->exit_status);
+  printf("%s: exit(%d)\n", t->name, t->exit_status);
   thread_exit();
 }
 
@@ -191,4 +193,14 @@ void check_address(void *addr)
   if(addr == NULL) exit(-1);
   if(!is_user_vaddr(addr)) exit(-1);
   if(pagedir_get_page(thread_current()->pagedir,addr) == NULL) exit(-1);
+}
+
+void get_argument(void *esp, int *arg , int count)
+{
+  for(int i = 0; i < count; i++){
+    uintptr_t offset = (i + 1) * sizeof(uintptr_t);
+    check_address(esp + offset);
+    // 값 넣어주기
+    arg[i] = *(int*)(esp + offset);
+  }
 }
