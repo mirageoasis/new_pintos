@@ -29,7 +29,6 @@ syscall_handler (struct intr_frame *f UNUSED)
   switch (syscall_num) {
     case SYS_HALT:
       halt();
-      ASSERT(false);
       break;
 
     case SYS_EXIT:
@@ -46,7 +45,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       printf("SYS_WAIT is not implemented.\n");
       ASSERT(false);
       break;
-
+    
     case SYS_CREATE:
       get_argument(f->esp, arg, 2);
       f->eax=create((const char*) arg[0], (unsigned int) arg[1]);
@@ -129,8 +128,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
 
     default:
-      printf("Unknown system call: %d\n", syscall_num);
-      ASSERT(false);
+      exit(-1);
       break;
   }
 }
