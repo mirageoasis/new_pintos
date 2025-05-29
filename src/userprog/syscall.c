@@ -204,9 +204,7 @@ pid_t exec(const char *cmd_line){
 }
 
 int wait (pid_t pid){
-  int ret = process_wait(pid);
-  //printf("waitpid is %d\n", ret);
-  return ret;
+  return process_wait(pid);
 }
 
 void check_address(void *addr)

@@ -119,15 +119,12 @@ int
 process_wait (tid_t child_tid) 
 {
   /* search child thread pointer */
-  //timer_msleep(3000);
-  //printf("current child_tid looking for is: %d\n", child_tid);
   struct thread* child = get_child_process(child_tid);
   struct thread* cur = thread_current();
   if(child == NULL)
     return -1;
   int exit_status=child->exit_status;
   sema_down(&(cur->exit_sema));
-  //ASSERT(false);
   /* remove child's element from parent's processes list */
   remove_child_process(child);
   /* return child's process id */
