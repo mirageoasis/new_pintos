@@ -4,6 +4,7 @@
 #include "userprog/syscall.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
 #include "threads/vaddr.h"
@@ -25,6 +26,7 @@ syscall_handler (struct intr_frame *f UNUSED)
   //hex_dump(f->esp, f->esp, 100, true);
   check_address(f->esp);
   uint8_t syscall_num = *((uint8_t*)(f->esp));
+  //printf("syscall number: %d\n", syscall_num);
   int arg[10];
   switch (syscall_num) {
     case SYS_HALT:
@@ -38,12 +40,12 @@ syscall_handler (struct intr_frame *f UNUSED)
 
     case SYS_EXEC:
       get_argument(f->esp, arg, 1);
-      exec((const char*)arg[0]);
+      f->eax=exec((const char*)arg[0]);
       break;
 
     case SYS_WAIT:
-      printf("SYS_WAIT is not implemented.\n");
-      ASSERT(false);
+      get_argument(f->esp, arg, 1);
+      f->eax=wait(arg[0]);
       break;
     
     case SYS_CREATE:
@@ -166,6 +168,8 @@ void exit(int status){
 
 bool create(const char *file , unsigned initial_size)
 {
+  if(file == NULL)
+    exit(-1);
   return filesys_create(file, initial_size);
 }
 
@@ -190,7 +194,19 @@ int read(int fd, void *buffer, unsigned length){
 }
 
 pid_t exec(const char *cmd_line){
-  return process_execute(cmd_line);
+  pid_t ret = process_execute(cmd_line);
+  struct thread* child = get_child_process(ret);
+  sema_down(&(thread_current()->load_sema));
+  if(!(child->is_loaded)){
+    return -1;
+  }
+  return ret;
+}
+
+int wait (pid_t pid){
+  int ret = process_wait(pid);
+  //printf("waitpid is %d\n", ret);
+  return ret;
 }
 
 void check_address(void *addr)

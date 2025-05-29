@@ -76,7 +76,7 @@ static void kernel_thread (thread_func *, void *aux);
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
-  static void init_thread (struct thread *, const char *name, int priority);
+static void init_thread (struct thread *, const char *name, int priority);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
@@ -198,7 +198,6 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  t->priority = priority;
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
@@ -214,6 +213,11 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
+
+  /*parent child process*/
+  struct thread* parent = thread_current();
+  list_push_front(&(parent->child_processes), &(t->child_process_elem));
+  t->parent = parent;
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -312,6 +316,8 @@ thread_exit (void)
      when it calls thread_schedule_tail(). */
   intr_disable ();
   list_remove (&thread_current()->allelem);
+  thread_current()->is_teminated=true;
+  sema_up(&(thread_current()->parent->exit_sema));
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -505,6 +511,16 @@ init_thread (struct thread *t, const char *name, int priority)
   t->nice = NICE_DEFAULT;
   t->recent_cpu = RECENT_CPU_DEFAULT;
 
+  /*init child process*/
+  list_init(&(t->child_processes));
+
+  /*parent child process*/
+  t->is_loaded=false;
+  t->is_teminated=false;
+  sema_init(&(t->exit_sema), 0);
+  sema_init(&(t->load_sema), 0);
+  t->parent=NULL;
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -579,7 +595,7 @@ thread_schedule_tail (struct thread *prev)
   if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread) 
     {
       ASSERT (prev != cur);
-      palloc_free_page (prev);
+      //palloc_free_page (prev);
     }
 }
 

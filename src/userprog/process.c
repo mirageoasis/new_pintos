@@ -17,6 +17,7 @@
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/vaddr.h"
 
 # define MAX_ARG_COUNT UINT8_MAX
@@ -77,16 +78,21 @@ start_process (void *file_name_)
   replace_white_space_to_null(copy_file_name, argument_name_array, &argument_size);
   //printf("file name %s\n", copy_file_name);
   success = load (copy_file_name, &if_.eip, &if_.esp);
+  struct thread* cur= thread_current();
+  ASSERT(cur->parent != NULL);
+  sema_up(&(cur->parent->load_sema));
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success){
     free(copy_file_name);
+    cur->is_loaded=false;
     thread_exit ();
   }
   
   // initialize value of stack
   argument_stack(argument_name_array, argument_size, &if_.esp);
+  cur->is_loaded=true;
   //hex_dump(if_.esp, if_.esp, 100 ,true);
   //printf("we have hex_dump\n");
   /* Start the user process by simulating a return from an
@@ -110,10 +116,22 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  timer_msleep(1000);
-  return -1;
+  /* search child thread pointer */
+  //timer_msleep(3000);
+  //printf("current child_tid looking for is: %d\n", child_tid);
+  struct thread* child = get_child_process(child_tid);
+  struct thread* cur = thread_current();
+  if(child == NULL)
+    return -1;
+  int exit_status=child->exit_status;
+  sema_down(&(cur->exit_sema));
+  //ASSERT(false);
+  /* remove child's element from parent's processes list */
+  remove_child_process(child);
+  /* return child's process id */
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -546,4 +564,33 @@ void replace_white_space_to_null(char* file_name, char** result, int* file_name_
     }
     result[count] = NULL;
     *file_name_size = count;
+}
+
+/*child parent process*/
+
+struct thread* get_child_process(int pid){
+  /* 자식 리스트에 접근하여 프로세스 디스크립터 검색 */
+  /* 해당 pid가 존재하면 프로세스 디스크립터 반환 */
+  /* 리스트에 존재하지 않으면 NULL 리턴 */
+  struct thread* cur = thread_current();
+  struct list* list = &(cur->child_processes);
+  struct list_elem* e;
+
+  for(e=list_begin(list); e!=list_end(list); e=list_next(e)){
+    struct thread* t = list_entry(e, struct thread, child_process_elem);
+    if(t->tid == pid){
+      return t;
+    }
+  }
+  return NULL;
+}
+
+void remove_child_process(struct thread *cp)
+{
+  /* 자식 리스트에서 제거*/
+  /* 프로세스 디스크립터 메모리 해제 */
+  //printf("removing child");
+  //ASSERT(false);
+  list_remove(&(cp->child_process_elem));
+  palloc_free_page(cp);
 }
