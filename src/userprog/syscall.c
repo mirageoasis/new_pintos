@@ -11,13 +11,16 @@
 #include "userprog/pagedir.h"
 #include <lib/kernel/stdio.h>
 #include <filesys/filesys.h>
+#include <filesys/file.h>
 
 static void syscall_handler (struct intr_frame *);
+struct lock filesys_lock;
 
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&filesys_lock);
 }
 
 static void
@@ -59,13 +62,13 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
 
     case SYS_OPEN:
-      printf("SYS_OPEN is not implemented.\n");
-      ASSERT(false);
+      get_argument(f->esp, arg, 1);
+      f->eax=open((const char*)arg[0]);
       break;
 
     case SYS_FILESIZE:
-      printf("SYS_FILESIZE is not implemented.\n");
-      ASSERT(false);
+      get_argument(f->esp, arg, 1);
+      f->eax=filesize(arg[0]);
       break;
 
     case SYS_READ:
@@ -80,18 +83,18 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
 
     case SYS_SEEK:
-      printf("SYS_SEEK is not implemented.\n");
-      ASSERT(false);
+      get_argument(f->esp, arg, 2);  
+      seek(arg[0], (unsigned int)arg[1]);
       break;
 
     case SYS_TELL:
-      printf("SYS_TELL is not implemented.\n");
-      ASSERT(false);
+      get_argument(f->esp, arg, 1);  
+      tell(arg[0]);
       break;
 
     case SYS_CLOSE:
-      printf("SYS_CLOSE is not implemented.\n");
-      ASSERT(false);
+      get_argument(f->esp, arg, 1);  
+      close(arg[0]);
       break;
 
     case SYS_MMAP:
@@ -146,13 +149,22 @@ syscall_handler (struct intr_frame *f UNUSED)
 }
 
 int write (int fd, const void *buffer, unsigned length){
+  int ret;
+  file_descriptor_range(fd);
+  lock_acquire(&filesys_lock);
   if(fd == 1){
     putbuf(buffer, length);
-    return length;
+    ret = length;
   }else{
-    printf("write fd without 1 is not implemented!\n");
-    ASSERT(false);
+    struct file* file_ptr;
+    if(!(file_ptr = process_get_file(fd))){
+      lock_release(&filesys_lock);  
+      exit(-1);
+    }
+    ret = file_write(file_ptr, buffer, length);
   }
+  lock_release(&filesys_lock);
+  return ret;
 }
 
 void halt(){
@@ -178,6 +190,9 @@ bool remove(const char *file){
 }
 
 int read(int fd, void *buffer, unsigned length){
+  int ret;
+  file_descriptor_range(fd);
+  lock_acquire(&filesys_lock);
   if(fd == 0){
     uint8_t character;
     int count=0;
@@ -186,11 +201,18 @@ int read(int fd, void *buffer, unsigned length){
       buffer+=sizeof(uint8_t);
       count+=1;
     }
-    return count;
+    ret = count;
   }else{
-    printf("read with fd non-zero is not implemented!\n");
-    ASSERT(false);
+    struct file* file_ptr;
+    if(!(file_ptr = process_get_file(fd))){
+      lock_release(&filesys_lock);   
+      exit(-1);
+    }
+    
+    ret = file_read(fd, buffer, length);
   }
+  lock_release(&filesys_lock);
+  return ret;
 }
 
 pid_t exec(const char *cmd_line){
@@ -205,6 +227,67 @@ pid_t exec(const char *cmd_line){
 
 int wait (pid_t pid){
   return process_wait(pid);
+}
+
+int open(const char *file)
+{
+  /* 파일을 open */
+  /* 해당 파일 객체에 파일 디스크립터 부여 */
+  /* 파일 디스크립터 리턴 */
+  /* 해당 파일이 존재하지 않으면 -1 리턴 */
+  if (!file)
+    return -1;
+  struct file* file_ptr;
+  if (!(file_ptr = filesys_open(file)))
+    return -1;
+  
+  return process_add_file(file_ptr);
+}
+
+int filesize(int fd){
+  /* 파일 디스크립터를 이용하여 파일 객체 검색 */
+  /* 해당 파일의 길이를 리턴 */
+  /* 해당 파일이 존재하지 않으면 -1 리턴 */
+  file_descriptor_range(fd);
+  struct file* file_ptr;
+  if(!(file_ptr = process_get_file(fd)))
+    return -1;
+  
+  return file_length(file_ptr);
+}
+
+void seek (int fd, unsigned position)
+{
+  /* 파일 디스크립터를 이용하여 파일 객체 검색 */
+  /* 해당 열린 파일의 위치(offset)를 position만큼 이동 */
+  file_descriptor_range(fd);
+  struct file* file_ptr = process_get_file(fd);
+  ASSERT(file_ptr);
+  ASSERT(position >= 0);
+  file_seek(file_ptr, position);
+}
+
+unsigned tell (int fd)
+{
+  /* 파일 디스크립터를 이용하여 파일 객체 검색 */
+  /* 해당 열린 파일의 위치를 반환 */
+  file_descriptor_range(fd);
+  struct file* file_ptr = process_get_file(fd);
+  ASSERT(file_ptr);
+  return file_tell(file_ptr);
+}
+
+void close (int fd)
+{
+  /* 해당 파일 디스크립터에 해당하는 파일을 닫음 */
+  /* 파일 디스크립터 엔트리 초기화 */
+  if (fd == 0 || fd == 1)
+    exit(-1);
+  file_descriptor_range(fd);
+  
+  struct file* file_ptr = process_get_file(fd);
+  ASSERT(file_ptr);
+  file_close(file_ptr);
 }
 
 void check_address(void *addr)
@@ -241,4 +324,9 @@ int max_of_four_int(int a, int b, int c, int d){
 int fibonacci(int n){
   if (n == 0 || n == 1) {return 1;};
   return fibonacci(n - 1) + n;
+}
+
+void file_descriptor_range(int fd){
+  if (fd < 0 || fd >= FILE_DESCRIPTOR_MAX)
+    exit(-1);
 }

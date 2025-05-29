@@ -154,6 +154,12 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  // clear file descriptor table
+    for(int i = FILE_DESCRIPTOR_MAX-1; i > -1; i--){
+    if(cur->fd_table[i])
+      file_close(cur->fd_table[i]);
+    cur->fd_table[i]=NULL;
+  }
 }
 
 /* Sets up the CPU for running user code in the current
@@ -590,4 +596,44 @@ void remove_child_process(struct thread *cp)
   //ASSERT(false);
   list_remove(&(cp->child_process_elem));
   palloc_free_page(cp);
+}
+
+int process_add_file (struct file *f)
+{
+  /* 파일 객체를 파일 디스크립터 테이블에 추가
+  /* 파일 디스크립터의 최대값 1 증가 */
+  /* 파일 디스크립터 리턴 */
+  struct thread* t = thread_current();
+  ASSERT(t->fd_max_index < FILE_DESCRIPTOR_MAX)
+  t->fd_table[t->fd_max_index]=f;
+  t->fd_max_index+=1;
+  return t->fd_max_index - 1;
+}
+
+struct file *process_get_file(int fd)
+{
+  /* 파일 디스크립터에 해당하는 파일 객체를 리턴 */
+  /* 없을 시 NULL 리턴 */
+  if (fd >= FILE_DESCRIPTOR_MAX || fd < 0)
+    exit(-1);
+  struct thread* t = thread_current();
+  
+  if(!t->fd_table[fd])
+    return NULL;
+  
+  return t->fd_table[fd];
+}
+
+
+void process_close_file(int fd)
+{
+  /* 파일 디스크립터에 해당하는 파일을 닫음 */
+  /* 파일 디스크립터 테이블 해당 엔트리 초기화 */
+  ASSERT(fd < FILE_DESCRIPTOR_MAX)
+  struct thread* t = thread_current();
+  if(!t->fd_table[fd])
+    exit(-1);
+  
+  file_close(t->fd_table[fd]);
+  t->fd_table[fd]=NULL;
 }

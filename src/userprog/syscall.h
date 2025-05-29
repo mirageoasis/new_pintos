@@ -22,4 +22,6 @@ void close (int fd);
 int fibonacci(int n);
 int max_of_four_int(int a, int b, int c, int d);
 
+extern struct lock filesys_lock;
+
 #endif /* userprog/syscall.h */

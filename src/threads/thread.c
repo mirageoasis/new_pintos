@@ -219,6 +219,13 @@ thread_create (const char *name, int priority,
   list_push_front(&(parent->child_processes), &(t->child_process_elem));
   t->parent = parent;
 
+  /*allocate memory to file descriptor table*/
+  for(int i = 0; i < FILE_DESCRIPTOR_MAX; i++){
+    (t->fd_table)[i]=NULL;
+  }
+  t->fd_max_index=2;
+
+
   /* Add to run queue. */
   thread_unblock (t);
   test_max_priority();

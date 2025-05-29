@@ -25,6 +25,8 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+#define FILE_DESCRIPTOR_MAX UINT8_MAX
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -125,6 +127,11 @@ struct thread
     /*create success*/
     bool is_loaded;
     bool is_teminated;
+
+    /*file*/
+    struct file* fd_table[FILE_DESCRIPTOR_MAX];
+    /*is not bigger then 255*/
+    uint8_t fd_max_index;
 
 #endif
 
