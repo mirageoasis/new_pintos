@@ -74,7 +74,6 @@ syscall_handler (struct intr_frame *f UNUSED)
     case SYS_READ:
       get_argument(f->esp, arg, 3);
       f->eax=read(arg[0], (const void *)arg[1], (unsigned int)arg[2]);
-      ASSERT(false);
       break;
 
     case SYS_WRITE:
@@ -192,8 +191,10 @@ bool remove(const char *file){
 int read(int fd, void *buffer, unsigned length){
   int ret;
   file_descriptor_range(fd);
+  //printf("file read %d %u\n", fd, length);
   lock_acquire(&filesys_lock);
   if(fd == 0){
+    //printf("fd is zero!\n");
     uint8_t character;
     int count=0;
     while((character = input_getc()) != NULL){
@@ -208,8 +209,7 @@ int read(int fd, void *buffer, unsigned length){
       lock_release(&filesys_lock);   
       exit(-1);
     }
-    
-    ret = file_read(fd, buffer, length);
+    ret = file_read(file_ptr, buffer, length);
   }
   lock_release(&filesys_lock);
   return ret;
@@ -240,7 +240,6 @@ int open(const char *file)
   struct file* file_ptr;
   if (!(file_ptr = filesys_open(file)))
     return -1;
-  
   return process_add_file(file_ptr);
 }
 
