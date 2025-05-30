@@ -124,9 +124,9 @@ process_wait (tid_t child_tid)
   struct thread* cur = thread_current();
   if(child == NULL)
     return -1;
-  int exit_status=child->exit_status;
   sema_down(&(cur->exit_sema));
   /* remove child's element from parent's processes list */
+  int exit_status=child->exit_status;
   remove_child_process(child);
   /* return child's process id */
   return exit_status;
