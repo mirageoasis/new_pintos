@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "devices/timer.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
@@ -138,6 +139,17 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  // clear file descriptor table
+  for(int i = FILE_DESCRIPTOR_MAX-1; i > 1; i--){
+    if(cur->fd_table[i]){
+      file_close(cur->fd_table[i]);
+    }
+    cur->fd_table[i]=NULL;
+  }
+  
+  if (cur->run_file)
+    file_allow_write(cur->run_file);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -154,12 +166,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  // clear file descriptor table
-    for(int i = FILE_DESCRIPTOR_MAX-1; i > -1; i--){
-    if(cur->fd_table[i])
-      file_close(cur->fd_table[i]);
-    cur->fd_table[i]=NULL;
-  }
 }
 
 /* Sets up the CPU for running user code in the current
@@ -268,12 +274,18 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  lock_acquire(&filesys_lock);
   file = filesys_open (file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
+      lock_release(&filesys_lock);
       goto done; 
     }
+  //printf("file name: %s file addr: %p\n", file_name, file);
+  t->run_file=file;
+  file_deny_write(file);
+  lock_release(&filesys_lock);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -358,7 +370,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file);
   return success;
 }
 

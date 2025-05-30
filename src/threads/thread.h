@@ -133,6 +133,8 @@ struct thread
     /*is not bigger then 255*/
     uint8_t fd_max_index;
 
+    struct file* run_file;
+
 #endif
 
     /* Owned by thread.c. */
