@@ -191,6 +191,7 @@ bool remove(const char *file){
 int read(int fd, void *buffer, unsigned length){
   int ret;
   file_descriptor_range(fd);
+  check_address(buffer);
   //printf("file read %d %u\n", fd, length);
   lock_acquire(&filesys_lock);
   if(fd == 0){
@@ -283,10 +284,14 @@ void close (int fd)
   if (fd == 0 || fd == 1)
     exit(-1);
   file_descriptor_range(fd);
+  struct thread* t = thread_current();
+
+  struct file* file_ptr;
+  if(!(file_ptr = process_get_file(fd)))
+    exit(-1);
   
-  struct file* file_ptr = process_get_file(fd);
-  ASSERT(file_ptr);
   file_close(file_ptr);
+  t->fd_table[fd]=NULL;
 }
 
 void check_address(void *addr)
