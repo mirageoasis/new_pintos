@@ -244,10 +244,15 @@ int open(const char *file)
   /* 해당 파일이 존재하지 않으면 -1 리턴 */
   if (!file)
     return -1;
+  lock_acquire(&filesys_lock);
   struct file* file_ptr;
-  if (!(file_ptr = filesys_open(file)))
+  if (!(file_ptr = filesys_open(file))){
+    lock_release(&filesys_lock);  
     return -1;
-  return process_add_file(file_ptr);
+  }
+  int ret = process_add_file(file_ptr);
+  lock_release(&filesys_lock);
+  return ret;
 }
 
 int filesize(int fd){
