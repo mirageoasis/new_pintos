@@ -324,7 +324,7 @@ thread_exit (void)
   intr_disable ();
   list_remove (&thread_current()->allelem);
   thread_current()->is_teminated=true;
-  sema_up(&(thread_current()->parent->exit_sema));
+  sema_up(&(thread_current()->exit_sema));
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();

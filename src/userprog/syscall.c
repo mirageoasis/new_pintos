@@ -218,11 +218,14 @@ int read(int fd, void *buffer, unsigned length){
 
 pid_t exec(const char *cmd_line){
   pid_t ret = process_execute(cmd_line);
+  if(ret == -1){
+    return -1;
+  }
   struct thread* child = get_child_process(ret);
   if(!child){
     exit(-1);
   }
-  sema_down(&(thread_current()->load_sema));
+  sema_down(&(child->load_sema));
   if(!(child->is_loaded)){
     return -1;
   }

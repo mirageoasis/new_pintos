@@ -81,7 +81,7 @@ start_process (void *file_name_)
   success = load (copy_file_name, &if_.eip, &if_.esp);
   struct thread* cur= thread_current();
   ASSERT(cur->parent != NULL);
-  sema_up(&(cur->parent->load_sema));
+  sema_up(&(cur->load_sema));
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -124,7 +124,7 @@ process_wait (tid_t child_tid)
   struct thread* cur = thread_current();
   if(child == NULL)
     return -1;
-  sema_down(&(cur->exit_sema));
+  sema_down(&(child->exit_sema));
   /* remove child's element from parent's processes list */
   int exit_status=child->exit_status;
   remove_child_process(child);
