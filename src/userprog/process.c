@@ -81,12 +81,13 @@ start_process (void *file_name_)
   success = load (copy_file_name, &if_.eip, &if_.esp);
   struct thread* cur= thread_current();
   ASSERT(cur->parent != NULL);
-  sema_up(&(cur->load_sema));
+  
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success){
     free(copy_file_name);
+    sema_up(&(cur->load_sema));
     cur->is_loaded=false;
     thread_exit ();
   }
@@ -94,6 +95,7 @@ start_process (void *file_name_)
   // initialize value of stack
   argument_stack(argument_name_array, argument_size, &if_.esp);
   cur->is_loaded=true;
+  sema_up(&(cur->load_sema));
   //hex_dump(if_.esp, if_.esp, 100 ,true);
   //printf("we have hex_dump\n");
   /* Start the user process by simulating a return from an
