@@ -107,10 +107,7 @@ struct thread
    /*data for mlfq*/
     int nice;
     int recent_cpu;
-#ifdef USERPROG
-    /* Owned by userprog/process.c. */
-    uint32_t *pagedir;                  /* Page directory. */
-    int exit_status;
+        int exit_status;
     
     struct thread* parent;
     /* child process */
@@ -134,6 +131,9 @@ struct thread
     uint8_t fd_max_index;
 
     struct file* run_file;
+#ifdef USERPROG
+    /* Owned by userprog/process.c. */
+    uint32_t *pagedir;                  /* Page directory. */
 
 #endif
 
