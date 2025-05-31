@@ -8,6 +8,8 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
+#include "devices/timer.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -16,7 +18,10 @@
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/vaddr.h"
+
+# define MAX_ARG_COUNT UINT8_MAX
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -29,6 +34,9 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char file_name_temp[1000];
+  char* parsed_file_name;
+  char * save_ptr;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -37,9 +45,11 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy(file_name_temp, file_name, strlen(file_name)+1);
 
+  parsed_file_name=strtok_r(file_name_temp, " ", &save_ptr);
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (parsed_file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -53,25 +63,48 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+  char* argument_name_array[UINT8_MAX];
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+
+  int argument_size = 0;
+  // make other functions to read first arguemnt of file name
+  char* copy_file_name = (char*) malloc(sizeof(char) * (strlen(file_name) + 1));
+  strlcpy(copy_file_name, file_name, strlen(file_name) + 1);
+  
+  replace_white_space_to_null(copy_file_name, argument_name_array, &argument_size);
+  //printf("file name %s\n", copy_file_name);
+  success = load (copy_file_name, &if_.eip, &if_.esp);
+  struct thread* cur= thread_current();
+  ASSERT(cur->parent != NULL);
+  
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-  if (!success) 
+  if (!success){
+    free(copy_file_name);
+    sema_up(&(cur->load_sema));
+    cur->is_loaded=false;
     thread_exit ();
-
+  }
+  
+  // initialize value of stack
+  argument_stack(argument_name_array, argument_size, &if_.esp);
+  cur->is_loaded=true;
+  sema_up(&(cur->load_sema));
+  //hex_dump(if_.esp, if_.esp, 100 ,true);
+  //printf("we have hex_dump\n");
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  free(copy_file_name);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -86,9 +119,19 @@ start_process (void *file_name_)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  return -1;
+  /* search child thread pointer */
+  struct thread* child = get_child_process(child_tid);
+  struct thread* cur = thread_current();
+  if(child == NULL)
+    return -1;
+  sema_down(&(child->exit_sema));
+  /* remove child's element from parent's processes list */
+  int exit_status=child->exit_status;
+  remove_child_process(child);
+  /* return child's process id */
+  return exit_status;
 }
 
 /* Free the current process's resources. */
@@ -97,6 +140,17 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+
+  // clear file descriptor table
+  for(int i = FILE_DESCRIPTOR_MAX-1; i > 1; i--){
+    if(cur->fd_table[i]){
+      file_close(cur->fd_table[i]);
+    }
+    cur->fd_table[i]=NULL;
+  }
+  
+  if (cur->run_file)
+    file_allow_write(cur->run_file);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -222,12 +276,18 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  lock_acquire(&filesys_lock);
   file = filesys_open (file_name);
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
+      lock_release(&filesys_lock);
       goto done; 
     }
+  //printf("file name: %s file addr: %p\n", file_name, file);
+  t->run_file=file;
+  file_deny_write(file);
+  lock_release(&filesys_lock);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -304,7 +364,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
-
+  
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
@@ -312,7 +372,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  //file_close (file);
   return success;
 }
 
@@ -462,4 +522,132 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+
+/* push argument to stack */
+void argument_stack(char **parse , int count , void **esp){
+  /* push parsed strings start address(string) */
+  /* push argument in right to left order*/
+  // *esp = address value
+  // push argument string
+  uintptr_t pointer_arr[MAX_ARG_COUNT];
+  push_argument_string_to_stack(parse, count, esp, pointer_arr);
+  push_argument_address_to_stack(count, esp, pointer_arr);
+  
+  // argument adress 
+  *esp-=sizeof(uintptr_t);
+  **(uintptr_t**)esp = *esp + sizeof(uintptr_t);
+  
+  // number of argument
+  *esp-=sizeof(uintptr_t);
+  memcpy(*esp, &count, sizeof(uintptr_t));
+
+  //fake return address
+  *esp-=sizeof(uintptr_t);
+  **((uintptr_t**)esp) = 0;
+}
+
+void push_argument_string_to_stack(char ** parse, int count, void **esp, uintptr_t* pointer_arr){
+  pointer_arr[count]=0;
+  for(int i = count-1; i > -1; i--){
+    // push string into stack
+    char* temp = parse[i];
+    *esp-=(strlen(temp)+1);
+    pointer_arr[i]=*esp;
+    //printf("address %p\n", *esp);
+    strlcpy(*esp, temp, strlen(temp)+1);
+  }
+  *esp = (void*)ROUND_DOWN((uintptr_t)*esp, sizeof(uintptr_t));
+}
+
+void push_argument_address_to_stack(int count, void** esp, uintptr_t* pointer_arr){
+  for(int i = count; i > -1; i--){
+    *esp-=sizeof(uintptr_t);
+    memcpy(*esp, &pointer_arr[i], sizeof(uintptr_t));
+  }
+}
+
+void replace_white_space_to_null(char* file_name, char** result, int* file_name_size) {
+    char* file_name_ptr;
+    char* save_ptr = NULL;
+    int count = 0;
+
+    file_name_ptr = strtok_r(file_name, " ", &save_ptr);
+    while (file_name_ptr != NULL) {
+        ASSERT(count < MAX_ARG_COUNT - 1);
+        result[count++] = file_name_ptr;
+        file_name_ptr = strtok_r(NULL, " ", &save_ptr);
+    }
+    result[count] = NULL;
+    *file_name_size = count;
+}
+
+/*child parent process*/
+
+struct thread* get_child_process(int pid){
+  /* 자식 리스트에 접근하여 프로세스 디스크립터 검색 */
+  /* 해당 pid가 존재하면 프로세스 디스크립터 반환 */
+  /* 리스트에 존재하지 않으면 NULL 리턴 */
+  struct thread* cur = thread_current();
+  struct list* list = &(cur->child_processes);
+  struct list_elem* e;
+
+  for(e=list_begin(list); e!=list_end(list); e=list_next(e)){
+    struct thread* t = list_entry(e, struct thread, child_process_elem);
+    if(t->tid == pid){
+      return t;
+    }
+  }
+  return NULL;
+}
+
+void remove_child_process(struct thread *cp)
+{
+  /* 자식 리스트에서 제거*/
+  /* 프로세스 디스크립터 메모리 해제 */
+  //printf("removing child");
+  //ASSERT(false);
+  list_remove(&(cp->child_process_elem));
+  palloc_free_page(cp);
+}
+
+int process_add_file (struct file *f)
+{
+  /* 파일 객체를 파일 디스크립터 테이블에 추가
+  /* 파일 디스크립터의 최대값 1 증가 */
+  /* 파일 디스크립터 리턴 */
+  struct thread* t = thread_current();
+  ASSERT(t->fd_max_index < FILE_DESCRIPTOR_MAX)
+  t->fd_table[t->fd_max_index]=f;
+  t->fd_max_index+=1;
+  return t->fd_max_index - 1;
+}
+
+struct file *process_get_file(int fd)
+{
+  /* 파일 디스크립터에 해당하는 파일 객체를 리턴 */
+  /* 없을 시 NULL 리턴 */
+  if (fd >= FILE_DESCRIPTOR_MAX || fd < 0)
+    exit(-1);
+  struct thread* t = thread_current();
+  
+  if(!t->fd_table[fd])
+    return NULL;
+  
+  return t->fd_table[fd];
+}
+
+
+void process_close_file(int fd)
+{
+  /* 파일 디스크립터에 해당하는 파일을 닫음 */
+  /* 파일 디스크립터 테이블 해당 엔트리 초기화 */
+  ASSERT(fd < FILE_DESCRIPTOR_MAX)
+  struct thread* t = thread_current();
+  if(!t->fd_table[fd])
+    exit(-1);
+  
+  file_close(t->fd_table[fd]);
+  t->fd_table[fd]=NULL;
 }
