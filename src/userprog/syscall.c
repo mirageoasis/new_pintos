@@ -13,7 +13,10 @@
 #include <filesys/filesys.h>
 #include <filesys/file.h>
 
+#include "vm/page.h"
+
 static void syscall_handler(struct intr_frame *);
+struct vm_entry *check_address(void *addr);
 struct lock filesys_lock;
 
 void syscall_init(void)
@@ -43,6 +46,7 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_EXEC:
     get_argument(f->esp, arg, 1);
+    check_valid_string((void *)arg[0]);
     f->eax = exec((const char *)arg[0]);
     break;
 
@@ -53,16 +57,19 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_CREATE:
     get_argument(f->esp, arg, 2);
+    check_valid_string((void *)arg[0]);
     f->eax = create((const char *)arg[0], (unsigned int)arg[1]);
     break;
 
   case SYS_REMOVE:
     get_argument(f->esp, arg, 1);
+    check_valid_string((void *)arg[0]);
     f->eax = remove((const char *)arg[0]);
     break;
 
   case SYS_OPEN:
     get_argument(f->esp, arg, 1);
+    check_valid_string((void *)arg[0]);
     f->eax = open((const char *)arg[0]);
     break;
 
@@ -73,11 +80,13 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_READ:
     get_argument(f->esp, arg, 3);
+    check_valid_buffer((const void *)arg[1], (unsigned int)arg[2], true);
     f->eax = read(arg[0], (const void *)arg[1], (unsigned int)arg[2]);
     break;
 
   case SYS_WRITE:
     get_argument(f->esp, arg, 3);
+    check_valid_buffer((const void *)arg[1], (unsigned int)arg[2], false);
     f->eax = write(arg[0], (const void *)arg[1], (unsigned int)arg[2]);
     break;
 
@@ -326,17 +335,57 @@ void close(int fd)
   t->fd_table[fd] = NULL;
 }
 
-void check_address(void *addr)
+struct vm_entry *check_address(void *addr)
 {
-  /* addr must not be null */
-  /* addr must be null */
-  /* addr must be within now process's page table list */
-  if (addr == NULL)
+  if (addr < (void *)0x08048000 || addr >= PHYS_BASE)
+  {
     exit(-1);
-  if (!is_user_vaddr(addr))
+  }
+  /*addr이 vm_entry에 존재하면 vm_entry를 반환하도록 코드 작성 */
+  /*find_vme() 사용*/
+  struct vm_entry *vm_entry;
+  if ((vm_entry = find_vme) == NULL)
     exit(-1);
-  if (pagedir_get_page(thread_current()->pagedir, addr) == NULL)
+  return vm_entry;
+}
+
+void check_valid_buffer(void *buffer, unsigned size, bool to_write)
+{
+  /* 인자로 받은 buffer부터 buffer + size까지의 크기가 한 페이지의
+  크기를 넘을 수도 있음 */
+  /* check_address를 이용해서 주소의 유저영역 여부를 검사함과 동시
+  에 vm_entry 구조체를 얻음 */
+
+  void *ptr = pg_round_down(buffer);
+  for (; ptr < buffer + size; ptr += PGSIZE)
+  {
+    struct vm_entry *vme = check_address(ptr);
+    if (vme == NULL || !(vme->writable))
+    {
+      exit(-1);
+    }
+  }
+}
+
+void check_valid_string(void *str)
+{
+  // str에 대한 vm_entry의 존재 여부를 확인`
+  // check address를 사용
+  struct vm_entry *vme = check_address(str);
+  if (vme == NULL)
     exit(-1);
+
+  int size = 0;
+  while (((char *)str)[size] != '\0')
+    size++;
+  void *ptr = pg_round_down(str);
+  // 인자로 받은 str도 str+ size까지의 크기가 한 페이지의 크기를 넘길 수 도 있음
+  for (; ptr < str + size; ptr += PGSIZE)
+  {
+    vme = check_address(ptr);
+    if (vme == NULL)
+      exit(-1);
+  }
 }
 
 void get_argument(void *esp, int *arg, int count)

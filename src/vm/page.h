@@ -5,6 +5,10 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#define VM_BIN 0  /*바이너리 파일로부터 데이터를 로드*/
+#define VM_FILE 1 /*매핑된 파일로부터 데이터를 로드*/
+#define VM_ANON 2 /*스왑 영역으로부터 데이터를 로드*/
+
 struct vm_entry
 {
     uint8_t type;      /* VM_BIN, VM_FILE, VM_ANON의 타입 */
