@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/synch.h"
+#include <hash.h>
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -136,6 +137,9 @@ struct thread
    uint32_t *pagedir; /* Page directory. */
 
 #endif
+
+   /*hash table for paging*/
+   struct hash vm;
 
    /* Owned by thread.c. */
    unsigned magic; /* Detects stack overflow. */

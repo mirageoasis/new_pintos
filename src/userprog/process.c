@@ -21,6 +21,8 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 
+#include "vm/page.h"
+
 #define MAX_ARG_COUNT UINT8_MAX
 
 static thread_func start_process NO_RETURN;
@@ -63,7 +65,10 @@ start_process(void *file_name_)
   struct intr_frame if_;
   bool success;
   char *argument_name_array[UINT8_MAX];
+  struct thread *cur = thread_current();
 
+  /*init virutal memory hash table*/
+  vm_init(&(cur->vm));
   /* Initialize interrupt frame and load executable. */
   memset(&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -78,7 +83,6 @@ start_process(void *file_name_)
   replace_white_space_to_null(copy_file_name, argument_name_array, &argument_size);
   // printf("file name %s\n", copy_file_name);
   success = load(copy_file_name, &if_.eip, &if_.esp);
-  struct thread *cur = thread_current();
   ASSERT(cur->parent != NULL);
 
   /* If load failed, quit. */
@@ -153,6 +157,7 @@ void process_exit(void)
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
+  vm_destroy(&(cur->vm));
   pd = cur->pagedir;
   if (pd != NULL)
   {
