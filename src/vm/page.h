@@ -1,3 +1,6 @@
+#ifndef __VM_PAGE_H
+#define __VM_PAGE_H
+
 #include <stdbool.h>
 #include <ctype.h>
 #include <stdbool.h>
@@ -35,3 +38,5 @@ bool insert_vme(struct hash *vm, struct vm_entry *vme);
 bool delete_vme(struct hash *vm, struct vm_entry *vme);
 struct vm_entry *find_vme(void *vaddr);
 void vm_destroy(struct hash *vm);
+bool load_file(void *kaddr, struct vm_entry *vme);
+#endif

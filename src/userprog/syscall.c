@@ -344,7 +344,7 @@ struct vm_entry *check_address(void *addr)
   /*addr이 vm_entry에 존재하면 vm_entry를 반환하도록 코드 작성 */
   /*find_vme() 사용*/
   struct vm_entry *vm_entry;
-  if ((vm_entry = find_vme) == NULL)
+  if ((vm_entry = find_vme(addr)) == NULL)
     exit(-1);
   return vm_entry;
 }

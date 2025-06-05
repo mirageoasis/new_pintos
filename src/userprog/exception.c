@@ -1,9 +1,15 @@
-#include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
+
+#include "userprog/exception.h"
+#include "userprog/syscall.h"
+#include "userprog/process.h"
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
+
+#include "vm/page.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -145,10 +151,29 @@ page_fault(struct intr_frame *f)
    not_present = (f->error_code & PF_P) == 0;
    write = (f->error_code & PF_W) != 0;
    user = (f->error_code & PF_U) != 0;
-   exit(-1);
-   /* To implement virtual memory, delete the rest of the function
-      body, and replace it with code that brings in the page to
-      which fault_addr refers. */
+
+   if (!not_present)
+      exit(-1);
+
+   check_address(fault_addr);
+
+   /* 페이지 폴트가 일어난 주소에 대한 vm_entry 구조체 탐색 */
+   struct vm_entry *vme = find_vme(fault_addr);
+   /* vm_entry를 인자로 넘겨주며 handle_mm_fault() 호출 */
+   bool loaded;
+
+   if (vme != NULL)
+   {
+      loaded = handle_mm_fault(vme);
+      if (!vme->is_loaded)
+      {
+         printf("fault_addr is not loaded on physical memory(page fault)\n");
+      }
+   }
+   if (loaded)
+      return;
+   /* 제대로 파일이 물리 메모리에 로드 되고 맵핑 됬는지 검사 */
+
    printf("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",

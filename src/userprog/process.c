@@ -1,10 +1,11 @@
-#include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "userprog/process.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -20,8 +21,6 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-
-#include "vm/page.h"
 
 #define MAX_ARG_COUNT UINT8_MAX
 
@@ -481,12 +480,16 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
     vme->vaddr = upage;
     vme->writable = writable;
     vme->is_loaded = false;
-    vme->file = file;
+    vme->file = file_reopen(file);
     vme->offset = ofs;
     vme->read_bytes = page_read_bytes;
     vme->zero_bytes = page_zero_bytes;
     /*insert vme*/
-    insert_vme(&(thread_current()->vm), vme);
+    if (!insert_vme(&(thread_current()->vm), vme))
+    {
+      printf("insert vme caused error!\n");
+      exit(-1);
+    }
 
     /* Advance. */
     read_bytes -= page_read_bytes;
@@ -505,15 +508,36 @@ setup_stack(void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-  if (kpage != NULL)
+  if ((kpage = palloc_get_page(PAL_USER | PAL_ZERO)) == NULL)
   {
-    success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
-    if (success)
-      *esp = PHYS_BASE;
-    else
-      palloc_free_page(kpage);
+    return false;
   }
+
+  success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
+  if (success)
+    *esp = PHYS_BASE;
+  else
+    palloc_free_page(kpage);
+
+  struct vm_entry *vme;
+  if ((vme = (struct vm_entry *)malloc(sizeof(struct vm_entry))) == NULL)
+  {
+    palloc_free_page(kpage);
+    return false;
+  }
+
+  vme->vaddr = ((uint8_t *)PHYS_BASE) - PGSIZE;
+  vme->writable = true;
+  vme->type = VM_ANON;
+  vme->is_loaded = true;
+
+  if (!insert_vme(&(thread_current()->vm), vme))
+  {
+    free(vme);
+    palloc_free_page(kpage);
+    return false;
+  }
+
   return success;
 }
 
@@ -670,4 +694,52 @@ void process_close_file(int fd)
 
   file_close(t->fd_table[fd]);
   t->fd_table[fd] = NULL;
+}
+
+bool handle_mm_fault(struct vm_entry *vme)
+{
+  /* palloc_get_page()를 이용해서 물리메모리 할당 */
+  void *kaddr = palloc_get_page(PAL_USER);
+  /* switch문으로 vm_entry의 타입별 처리 (VM_BIN외의 나머지 타입은 mmf와 swapping에서 다룸*/
+
+  if (vme->is_loaded)
+    return false;
+
+  if (!kaddr)
+    return false;
+
+  switch (vme->type)
+  {
+  /* if vm_entry type is VM_BIN */
+  case VM_BIN:
+    /* try to load_file to physical memory if fail, free the physical memory */
+    if (!load_file(kaddr, vme))
+    {
+      printf("load_file error!(handle_mm_fault)\n");
+      palloc_free_page(kaddr);
+      return false;
+    }
+    break;
+  /* if vm_entry type is VM_FILE */
+  case VM_FILE:
+    ASSERT(false);
+    break;
+  case VM_ANON:
+    ASSERT(false);
+    break;
+  default:
+    printf("vme->type is: %d\n", vme->type);
+    ASSERT(false);
+    return false;
+  }
+  /* install_page를 이용해서 물리페이지와 가상페이지 맵핑 */
+  if (!install_page(vme->vaddr, kaddr, vme->writable))
+  {
+    printf("install page at handle_mm_fault failed!\n");
+    palloc_free_page(kaddr);
+    return false;
+  }
+  vme->is_loaded = true;
+
+  return true;
 }

@@ -1,6 +1,8 @@
 #include <stdbool.h>
 #include <hash.h>
+#include <string.h>
 #include "vm/page.h"
+#include "filesys/file.h"
 
 void vm_init(struct hash *vm)
 {
@@ -30,7 +32,7 @@ static bool vm_less_func(const struct hash_elem *a, const struct hash_elem *b)
 bool insert_vme(struct hash *vm, struct vm_entry *vme)
 {
     /* hash_insert()함수 사용 */
-    return hash_insert(vm, vme) != NULL;
+    return hash_insert(vm, &(vme->elem)) == NULL;
 }
 
 bool delete_vme(struct hash *vm, struct vm_entry *vme)
@@ -47,12 +49,30 @@ struct vm_entry *find_vme(void *vaddr)
     /* hash_entry()로 해당 hash_elem의 vm_entry 구조체 리턴 */
     struct vm_entry search_entry;
     search_entry.vaddr = pg_round_down(vaddr);
+    struct hash_elem *elem = hash_find(&(thread_current()->vm), &(search_entry.elem));
 
-    return hash_find(&(thread_current()->vm), &(search_entry.elem));
+    if (!elem)
+        return NULL;
+
+    return hash_entry(elem, struct vm_entry, elem);
 }
 
 void vm_destroy(struct hash *vm)
 {
     /* hash_destroy()으로 해시테이블의 버킷리스트와 vm_entry들을 제거 */
     hash_destroy(vm, NULL);
+}
+
+bool load_file(void *kaddr, struct vm_entry *vme)
+{
+    /* Using file_read() + file_seek() */
+    /* 오프셋을 vm_entry에 해당하는 오프셋으로 설정(file_seek()) */
+    /* file_read로 물리페이지에 read_bytes만큼 데이터를 씀*/
+    /* zero_bytes만큼 남는 부분을 ‘0’으로 패딩 */
+    /* file_read 여부 반환 */
+    if (!(vme->read_bytes == file_read_at(vme->file, kaddr, vme->read_bytes, vme->offset)))
+        return false;
+
+    memset(kaddr + vme->read_bytes, 0, vme->zero_bytes);
+    return true;
 }
