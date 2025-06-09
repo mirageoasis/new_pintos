@@ -480,7 +480,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
     vme->vaddr = upage;
     vme->writable = writable;
     vme->is_loaded = false;
-    vme->file = file_reopen(file);
+    vme->file = file;
     vme->offset = ofs;
     vme->read_bytes = page_read_bytes;
     vme->zero_bytes = page_zero_bytes;
@@ -508,7 +508,7 @@ setup_stack(void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  if ((kpage = palloc_get_page(PAL_USER | PAL_ZERO)) == NULL)
+  if (!(kpage = palloc_get_page(PAL_USER | PAL_ZERO)))
   {
     return false;
   }
@@ -733,6 +733,7 @@ bool handle_mm_fault(struct vm_entry *vme)
     return false;
   }
   /* install_page를 이용해서 물리페이지와 가상페이지 맵핑 */
+
   if (!install_page(vme->vaddr, kaddr, vme->writable))
   {
     printf("install page at handle_mm_fault failed!\n");

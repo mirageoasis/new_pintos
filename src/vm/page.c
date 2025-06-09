@@ -3,6 +3,7 @@
 #include <string.h>
 #include "vm/page.h"
 #include "filesys/file.h"
+#include "userprog/syscall.h"
 
 void vm_init(struct hash *vm)
 {
@@ -38,7 +39,12 @@ bool insert_vme(struct hash *vm, struct vm_entry *vme)
 bool delete_vme(struct hash *vm, struct vm_entry *vme)
 {
     /* hash_delete()함수 사용 */
-    return hash_delete(vm, vme) != NULL;
+    bool ret = hash_delete(vm, vme) != NULL;
+
+    if (ret)
+        free(vme);
+
+    return ret;
 }
 
 struct vm_entry *find_vme(void *vaddr)
@@ -70,7 +76,10 @@ bool load_file(void *kaddr, struct vm_entry *vme)
     /* file_read로 물리페이지에 read_bytes만큼 데이터를 씀*/
     /* zero_bytes만큼 남는 부분을 ‘0’으로 패딩 */
     /* file_read 여부 반환 */
-    if (!(vme->read_bytes == file_read_at(vme->file, kaddr, vme->read_bytes, vme->offset)))
+
+    file_seek(vme->file, vme->offset);
+
+    if (file_read(vme->file, kaddr, vme->read_bytes) != (int)(vme->read_bytes))
         return false;
 
     memset(kaddr + vme->read_bytes, 0, vme->zero_bytes);

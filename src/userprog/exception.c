@@ -155,29 +155,13 @@ page_fault(struct intr_frame *f)
    if (!not_present)
       exit(-1);
 
-   check_address(fault_addr);
-
    /* 페이지 폴트가 일어난 주소에 대한 vm_entry 구조체 탐색 */
    struct vm_entry *vme = find_vme(fault_addr);
    /* vm_entry를 인자로 넘겨주며 handle_mm_fault() 호출 */
    bool loaded;
-
-   if (vme != NULL)
+   if (!vme || !handle_mm_fault(vme))
    {
-      loaded = handle_mm_fault(vme);
-      if (!vme->is_loaded)
-      {
-         printf("fault_addr is not loaded on physical memory(page fault)\n");
-      }
+      exit(-1);
    }
-   if (loaded)
-      return;
    /* 제대로 파일이 물리 메모리에 로드 되고 맵핑 됬는지 검사 */
-
-   printf("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-   kill(f);
 }

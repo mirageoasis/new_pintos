@@ -337,6 +337,9 @@ void close(int fd)
 
 struct vm_entry *check_address(void *addr)
 {
+  if (!addr)
+    exit(-1);
+
   if (addr < (void *)0x08048000 || addr >= PHYS_BASE)
   {
     exit(-1);
