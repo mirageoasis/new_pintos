@@ -506,6 +506,10 @@ init_thread(struct thread *t, const char *name, int priority)
   /*parent child process*/
   t->is_loaded = false;
   t->is_teminated = false;
+
+  /*mmap*/
+  list_init(&(t->mmap_list));
+  t->next_mapid = 1;
   sema_init(&(t->exit_sema), 0);
   sema_init(&(t->load_sema), 0);
   t->parent = NULL;

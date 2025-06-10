@@ -143,6 +143,9 @@ struct thread
 
    /* Owned by thread.c. */
    unsigned magic; /* Detects stack overflow. */
+
+   struct list mmap_list;
+   int next_mapid; // 다음으로 mapping될 mapid
 };
 
 /* If false (default), use round-robin scheduler.

@@ -17,4 +17,6 @@ int process_add_file(struct file *);
 struct file *process_get_file(int);
 bool handle_mm_fault(struct vm_entry *vme);
 
+void do_munmap(struct mmap_file *mmap_file);
+
 #endif /* userprog/process.h */

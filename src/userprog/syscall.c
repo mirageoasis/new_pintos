@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <lib/user/syscall.h>
 #include <syscall-nr.h>
 #include "userprog/process.h"
 #include "userprog/syscall.h"
@@ -106,13 +107,14 @@ syscall_handler(struct intr_frame *f UNUSED)
     break;
 
   case SYS_MMAP:
-    printf("SYS_MMAP is not implemented.\n");
-    ASSERT(false);
+    get_argument(f->esp, arg, 2);
+    check_address((const void *)arg[1]);
+    f->eax = mmap((mapid_t)arg[0], (const void *)arg[1]);
     break;
 
   case SYS_MUNMAP:
-    printf("SYS_MUNMAP is not implemented.\n");
-    ASSERT(false);
+    get_argument(f->esp, arg, 1);
+    munmap((mapid_t)arg[0]);
     break;
 
   case SYS_CHDIR:
@@ -335,6 +337,91 @@ void close(int fd)
   t->fd_table[fd] = NULL;
 }
 
+mapid_t mmap(int fd, void *addr)
+{
+  struct file *old_file_ptr;
+  struct file *new_file_ptr;
+  int mapid;
+
+  if (!addr || pg_ofs(addr) != 0)
+    return -1;
+
+  if (!(old_file_ptr = process_get_file(fd)))
+  {
+    return -1;
+  }
+
+  if (!(new_file_ptr = file_reopen(old_file_ptr)))
+  {
+    return -1;
+  }
+  struct mmap_file *m_file;
+  struct vm_entry *vme;
+
+  if ((m_file = ((struct mmap_file *)malloc(sizeof(struct mmap_file)))) == NULL)
+  {
+    return -1;
+  }
+
+  // init mmap
+  m_file->file = new_file_ptr;
+  list_init(&(m_file->vme_list));
+  list_push_front(&(thread_current()->mmap_list), &(m_file->elem));
+
+  int read_bytes = file_length(m_file->file); // 읽어야할 바이트의 수
+  int ofs = 0;
+  while (read_bytes > 0)
+  {
+
+    /* Calculate how to fill this page.
+       We will read PAGE_READ_BYTES bytes from FILE
+       and zero the final PAGE_ZERO_BYTES bytes. */
+    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+    // vm entry 생성(malloc 사용)
+    struct vm_entry *vme = malloc(sizeof(struct vm_entry));
+    // vm_entry 멤버들 설정, 가상페이지가 요구될 때 읽어야할 파일의 오프셋과 사이즈, 마지막에 패딩할 제로바이트 등등
+    vme->type = VM_FILE;
+    vme->vaddr = addr;
+    vme->writable = true;
+    vme->is_loaded = false;
+    vme->file = m_file->file;
+    vme->offset = ofs;
+    vme->read_bytes = page_read_bytes;
+    vme->zero_bytes = page_zero_bytes;
+    list_push_back(&(m_file->vme_list), &vme->mmap_elem);
+    insert_vme(&thread_current()->vm, vme);
+
+    /* Advance. */
+    read_bytes -= page_read_bytes;
+    ofs += page_read_bytes;
+    addr += PGSIZE;
+  }
+
+  return thread_current()
+      ->next_mapid++;
+}
+
+void munmap(mapid_t mapid)
+{
+  struct thread *cur = thread_current();
+
+  struct mmap_file *m_file = NULL;
+  struct list_elem *e;
+
+  for (e = list_begin(&(cur->mmap_list)); e != list_end(&(cur->mmap_list)); e = list_next(e))
+  {
+    struct mmap_file *m_file = list_entry(e, struct mmap_file, elem);
+
+    if (m_file->mapid == mapid)
+    {
+      do_munmap(m_file);
+    }
+  }
+  return;
+}
+
 struct vm_entry *check_address(void *addr)
 {
   if (!addr)
@@ -346,10 +433,7 @@ struct vm_entry *check_address(void *addr)
   }
   /*addr이 vm_entry에 존재하면 vm_entry를 반환하도록 코드 작성 */
   /*find_vme() 사용*/
-  struct vm_entry *vm_entry;
-  if ((vm_entry = find_vme(addr)) == NULL)
-    exit(-1);
-  return vm_entry;
+  return find_vme(addr);
 }
 
 void check_valid_buffer(void *buffer, unsigned size, bool to_write)

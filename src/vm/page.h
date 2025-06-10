@@ -31,6 +31,14 @@ struct vm_entry
     struct hash_elem elem; /* 해시 테이블 Element */
 };
 
+struct mmap_file
+{
+    int mapid;             /*매핑 id*/
+    struct file *file;     /*매핑하는 파일 obj*/
+    struct list_elem elem; /*스레드에서 mmap에 접근하기 위한 list*/
+    struct list vme_list;  /* 해당하는 모든 vm_entry들의 list mmap_elem을 사용해서 접근*/
+};
+
 void vm_init(struct hash *vm);
 static unsigned vm_hash_func(const struct hash_elem *e, void *aux);
 static bool vm_less_func(const struct hash_elem *a, const struct hash_elem *b);

@@ -141,6 +141,16 @@ void process_exit(void)
   struct thread *cur = thread_current();
   uint32_t *pd;
 
+  struct list_elem *e;
+  for (e = list_begin(&(cur->mmap_list)); e != list_end(&(cur->mmap_list));)
+  {
+    struct list_elem *next_e = list_next(e);
+
+    struct mmap_file *m_file = list_entry(e, struct mmap_file, elem);
+    do_munmap(m_file);
+    e = next_e;
+  }
+
   // clear file descriptor table
   for (int i = FILE_DESCRIPTOR_MAX - 1; i > 1; i--)
   {
@@ -722,7 +732,12 @@ bool handle_mm_fault(struct vm_entry *vme)
     break;
   /* if vm_entry type is VM_FILE */
   case VM_FILE:
-    ASSERT(false);
+    if (!load_file(kaddr, vme))
+    {
+      printf("load_file error!(handle_mm_fault)\n");
+      palloc_free_page(kaddr);
+      return false;
+    }
     break;
   case VM_ANON:
     ASSERT(false);
@@ -743,4 +758,25 @@ bool handle_mm_fault(struct vm_entry *vme)
   vme->is_loaded = true;
 
   return true;
+}
+
+void do_munmap(struct mmap_file *mmap_file)
+{
+  /*mmap_file의 vme_list에 연결된 모든 vm_entry들을 제거*/
+  struct list_elem *e;
+  struct thread *cur = thread_current();
+
+  for (e = list_begin(&(mmap_file->vme_list)); e != list_end(&(mmap_file->vme_list));)
+  {
+    struct vm_entry *vme = list_entry(e, struct vm_entry, mmap_elem);
+    /* vm_entry가리키는 가상 주소에 대한 물리 페이지가 존재하고, dirty하면 디스크에 메모리 내용을 기록*/
+    if (vme->is_loaded && pagedir_is_dirty(thread_current()->pagedir, vme->vaddr))
+    {
+      file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+    }
+    vme->is_loaded = false;
+    /*페이지 테이블 엔트리 제거*/
+    delete_vme(&thread_current()->vm, vme);
+    e = list_remove(e);
+  }
 }
