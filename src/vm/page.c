@@ -38,13 +38,17 @@ bool insert_vme(struct hash *vm, struct vm_entry *vme)
 
 bool delete_vme(struct hash *vm, struct vm_entry *vme)
 {
-    /* hash_delete()함수 사용 */
-    bool ret = hash_delete(vm, vme) != NULL;
+    struct vm_entry *target;
+    struct hash_elem *e;
 
-    if (ret)
-        free(vme);
+    e = hash_find(vm, &(vme->elem));
+    if (e == NULL)
+        return false;
 
-    return ret;
+    target = hash_entry(e, struct vm_entry, elem);
+    hash_delete(vm, e);
+    free(target);
+    return true;
 }
 
 struct vm_entry *find_vme(void *vaddr)

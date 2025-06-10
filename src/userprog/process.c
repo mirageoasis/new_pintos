@@ -769,14 +769,24 @@ void do_munmap(struct mmap_file *mmap_file)
   for (e = list_begin(&(mmap_file->vme_list)); e != list_end(&(mmap_file->vme_list));)
   {
     struct vm_entry *vme = list_entry(e, struct vm_entry, mmap_elem);
-    /* vm_entry가리키는 가상 주소에 대한 물리 페이지가 존재하고, dirty하면 디스크에 메모리 내용을 기록*/
-    if (vme->is_loaded && pagedir_is_dirty(thread_current()->pagedir, vme->vaddr))
+    if (vme->is_loaded)
     {
-      file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+      void *kpage = pagedir_get_page(cur->pagedir, vme->vaddr);
+      if (pagedir_is_dirty(cur->pagedir, vme->vaddr))
+      {
+        file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+      }
+
+      pagedir_clear_page(cur->pagedir, vme->vaddr); // pte 제거
+      if (kpage != NULL)
+      {
+        palloc_free_page(kpage); // 메모리 반환
+      }
     }
-    vme->is_loaded = false;
-    /*페이지 테이블 엔트리 제거*/
-    delete_vme(&thread_current()->vm, vme);
     e = list_remove(e);
+    delete_vme(&thread_current()->vm, vme);
   }
+  /*remove from thread's list*/
+  list_remove(&(mmap_file->elem));
+  free(mmap_file);
 }

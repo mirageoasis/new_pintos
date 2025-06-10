@@ -339,19 +339,13 @@ void close(int fd)
 
 mapid_t mmap(int fd, void *addr)
 {
-  struct file *old_file_ptr;
   struct file *new_file_ptr;
   int mapid;
 
   if (!addr || pg_ofs(addr) != 0)
     return -1;
 
-  if (!(old_file_ptr = process_get_file(fd)))
-  {
-    return -1;
-  }
-
-  if (!(new_file_ptr = file_reopen(old_file_ptr)))
+  if (!(new_file_ptr = file_reopen(process_get_file(fd))))
   {
     return -1;
   }
@@ -365,6 +359,7 @@ mapid_t mmap(int fd, void *addr)
 
   // init mmap
   m_file->file = new_file_ptr;
+  m_file->mapid = thread_current()->next_mapid++;
   list_init(&(m_file->vme_list));
   list_push_front(&(thread_current()->mmap_list), &(m_file->elem));
 
@@ -399,8 +394,7 @@ mapid_t mmap(int fd, void *addr)
     addr += PGSIZE;
   }
 
-  return thread_current()
-      ->next_mapid++;
+  return m_file->mapid;
 }
 
 void munmap(mapid_t mapid)
@@ -413,10 +407,16 @@ void munmap(mapid_t mapid)
   for (e = list_begin(&(cur->mmap_list)); e != list_end(&(cur->mmap_list)); e = list_next(e))
   {
     struct mmap_file *m_file = list_entry(e, struct mmap_file, elem);
-
-    if (m_file->mapid == mapid)
+    ASSERT(m_file->mapid != NULL)
+    if (mapid == 0)
     {
       do_munmap(m_file);
+    }
+    else if (m_file->mapid == mapid)
+    {
+      ASSERT(mapid != 0)
+      do_munmap(m_file);
+      return;
     }
   }
   return;
