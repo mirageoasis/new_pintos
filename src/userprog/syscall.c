@@ -108,7 +108,6 @@ syscall_handler(struct intr_frame *f UNUSED)
 
   case SYS_MMAP:
     get_argument(f->esp, arg, 2);
-    check_address((const void *)arg[1]);
     f->eax = mmap((mapid_t)arg[0], (const void *)arg[1]);
     break;
 
@@ -341,8 +340,10 @@ mapid_t mmap(int fd, void *addr)
 {
   struct file *new_file_ptr;
   int mapid;
+  if (!is_user_vaddr(addr) || pg_ofs(addr) != 0 || !addr || process_get_file(fd) == NULL)
+    return -1;
 
-  if (!addr || pg_ofs(addr) != 0)
+  if (find_vme(addr))
     return -1;
 
   if (!(new_file_ptr = file_reopen(process_get_file(fd))))
