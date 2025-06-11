@@ -22,6 +22,8 @@ void close(int fd);
 int fibonacci(int n);
 int max_of_four_int(int a, int b, int c, int d);
 
+struct vm_entry *check_address(void *addr);
+
 extern struct lock filesys_lock;
 
 #endif /* userprog/syscall.h */

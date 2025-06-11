@@ -506,6 +506,10 @@ init_thread(struct thread *t, const char *name, int priority)
   /*parent child process*/
   t->is_loaded = false;
   t->is_teminated = false;
+
+  /*mmap*/
+  list_init(&(t->mmap_list));
+  t->next_mapid = 1;
   sema_init(&(t->exit_sema), 0);
   sema_init(&(t->load_sema), 0);
   t->parent = NULL;
@@ -735,12 +739,19 @@ void donate_priority()
 
   for (int i = 0; i < 8; i++)
   {
-    if (cur->wait_on_lock == NULL)
+    struct lock *lock = cur->wait_on_lock;
+    if (lock == NULL)
     {
       break;
     }
-    struct thread *holder = cur->wait_on_lock->holder;
-    holder->priority = priority_to_donate;
+    struct thread *holder = lock->holder;
+    if (holder == NULL)
+    {
+      break; // 이거 안 넣으면 바로 page fault 나니까 안전하게 막아줌
+    }
+
+    if (holder->priority < priority_to_donate)
+      holder->priority = priority_to_donate;
     cur = holder;
   }
 }

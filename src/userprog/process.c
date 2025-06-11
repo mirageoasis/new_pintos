@@ -1,10 +1,11 @@
-#include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "userprog/process.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -63,7 +64,10 @@ start_process(void *file_name_)
   struct intr_frame if_;
   bool success;
   char *argument_name_array[UINT8_MAX];
+  struct thread *cur = thread_current();
 
+  /*init virutal memory hash table*/
+  vm_init(&(cur->vm));
   /* Initialize interrupt frame and load executable. */
   memset(&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -78,7 +82,6 @@ start_process(void *file_name_)
   replace_white_space_to_null(copy_file_name, argument_name_array, &argument_size);
   // printf("file name %s\n", copy_file_name);
   success = load(copy_file_name, &if_.eip, &if_.esp);
-  struct thread *cur = thread_current();
   ASSERT(cur->parent != NULL);
 
   /* If load failed, quit. */
@@ -138,6 +141,16 @@ void process_exit(void)
   struct thread *cur = thread_current();
   uint32_t *pd;
 
+  struct list_elem *e;
+  for (e = list_begin(&(cur->mmap_list)); e != list_end(&(cur->mmap_list));)
+  {
+    struct list_elem *next_e = list_next(e);
+
+    struct mmap_file *m_file = list_entry(e, struct mmap_file, elem);
+    do_munmap(m_file);
+    e = next_e;
+  }
+
   // clear file descriptor table
   for (int i = FILE_DESCRIPTOR_MAX - 1; i > 1; i--)
   {
@@ -153,6 +166,7 @@ void process_exit(void)
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
+  vm_destroy(&(cur->vm));
   pd = cur->pagedir;
   if (pd != NULL)
   {
@@ -445,30 +459,52 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
        and zero the final PAGE_ZERO_BYTES bytes. */
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-    /* Get a page of memory. */
+    /* old one
+    //Get a page of memory.
     uint8_t *kpage = palloc_get_page(PAL_USER);
     if (kpage == NULL)
       return false;
 
-    /* Load this page. */
+    // Load this page.
     if (file_read(file, kpage, page_read_bytes) != (int)page_read_bytes)
     {
       palloc_free_page(kpage);
       return false;
     }
     memset(kpage + page_read_bytes, 0, page_zero_bytes);
-
-    /* Add the page to the process's address space. */
+    // Add the page to the process's address space.
     if (!install_page(upage, kpage, writable))
     {
       palloc_free_page(kpage);
       return false;
     }
+    */
+
+    /*init vm entry*/
+    struct vm_entry *vme = (struct vm_entry *)malloc(sizeof(struct vm_entry));
+
+    if (vme == NULL)
+      return false;
+
+    vme->type = VM_BIN;
+    vme->vaddr = upage;
+    vme->writable = writable;
+    vme->is_loaded = false;
+    vme->file = file;
+    vme->offset = ofs;
+    vme->read_bytes = page_read_bytes;
+    vme->zero_bytes = page_zero_bytes;
+    /*insert vme*/
+    if (!insert_vme(&(thread_current()->vm), vme))
+    {
+      printf("insert vme caused error!\n");
+      exit(-1);
+    }
 
     /* Advance. */
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
+    ofs += page_read_bytes;
     upage += PGSIZE;
   }
   return true;
@@ -482,15 +518,36 @@ setup_stack(void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page(PAL_USER | PAL_ZERO);
-  if (kpage != NULL)
+  if (!(kpage = palloc_get_page(PAL_USER | PAL_ZERO)))
   {
-    success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
-    if (success)
-      *esp = PHYS_BASE;
-    else
-      palloc_free_page(kpage);
+    return false;
   }
+
+  success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
+  if (success)
+    *esp = PHYS_BASE;
+  else
+    palloc_free_page(kpage);
+
+  struct vm_entry *vme;
+  if ((vme = (struct vm_entry *)malloc(sizeof(struct vm_entry))) == NULL)
+  {
+    palloc_free_page(kpage);
+    return false;
+  }
+
+  vme->vaddr = ((uint8_t *)PHYS_BASE) - PGSIZE;
+  vme->writable = true;
+  vme->type = VM_ANON;
+  vme->is_loaded = true;
+
+  if (!insert_vme(&(thread_current()->vm), vme))
+  {
+    free(vme);
+    palloc_free_page(kpage);
+    return false;
+  }
+
   return success;
 }
 
@@ -647,4 +704,79 @@ void process_close_file(int fd)
 
   file_close(t->fd_table[fd]);
   t->fd_table[fd] = NULL;
+}
+
+bool handle_mm_fault(struct vm_entry *vme)
+{
+  /* palloc_get_page()를 이용해서 물리메모리 할당 */
+  void *kaddr = palloc_get_page(PAL_USER);
+  /* switch문으로 vm_entry의 타입별 처리 (VM_BIN외의 나머지 타입은 mmf와 swapping에서 다룸*/
+
+  if (vme->is_loaded)
+    return false;
+
+  if (!kaddr)
+    return false;
+
+  switch (vme->type)
+  {
+  /* if vm_entry type is VM_BIN */
+  case VM_BIN:
+    /* try to load_file to physical memory if fail, free the physical memory */
+    if (!load_file(kaddr, vme))
+    {
+      printf("load_file error!(handle_mm_fault)\n");
+      palloc_free_page(kaddr);
+      return false;
+    }
+    break;
+  /* if vm_entry type is VM_FILE */
+  case VM_FILE:
+    if (!load_file(kaddr, vme))
+    {
+      printf("load_file error!(handle_mm_fault)\n");
+      palloc_free_page(kaddr);
+      return false;
+    }
+    break;
+  case VM_ANON:
+    ASSERT(false);
+    break;
+  default:
+    printf("vme->type is: %d\n", vme->type);
+    ASSERT(false);
+    return false;
+  }
+  /* install_page를 이용해서 물리페이지와 가상페이지 맵핑 */
+
+  if (!install_page(vme->vaddr, kaddr, vme->writable))
+  {
+    printf("install page at handle_mm_fault failed!\n");
+    palloc_free_page(kaddr);
+    return false;
+  }
+  vme->is_loaded = true;
+
+  return true;
+}
+
+void do_munmap(struct mmap_file *mmap_file)
+{
+  /*mmap_file의 vme_list에 연결된 모든 vm_entry들을 제거*/
+  struct list_elem *e;
+  struct thread *cur = thread_current();
+
+  for (e = list_begin(&(mmap_file->vme_list)); e != list_end(&(mmap_file->vme_list));)
+  {
+    struct vm_entry *vme = list_entry(e, struct vm_entry, mmap_elem);
+    if (vme->is_loaded && pagedir_is_dirty(cur->pagedir, vme->vaddr))
+    {
+      file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+    }
+    e = list_remove(e);
+    delete_vme(&thread_current()->vm, vme);
+  }
+  /*remove from thread's list*/
+  list_remove(&(mmap_file->elem));
+  free(mmap_file);
 }
