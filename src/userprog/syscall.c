@@ -426,7 +426,9 @@ void munmap(mapid_t mapid)
 struct vm_entry *check_address(void *addr)
 {
   if (!addr)
+  {
     exit(-1);
+  }
 
   if (addr < (void *)0x08048000 || addr >= PHYS_BASE)
   {
@@ -448,7 +450,11 @@ void check_valid_buffer(void *buffer, unsigned size, bool to_write)
   for (; ptr < buffer + size; ptr += PGSIZE)
   {
     struct vm_entry *vme = check_address(ptr);
-    if (vme == NULL || !(vme->writable))
+    if (vme == NULL)
+    {
+      exit(-1);
+    }
+    if (to_write && !(vme->writable))
     {
       exit(-1);
     }
