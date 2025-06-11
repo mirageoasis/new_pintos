@@ -3,7 +3,6 @@
 
 #include <stdbool.h>
 #include <ctype.h>
-#include <stdbool.h>
 #include <hash.h>
 #include "threads/thread.h"
 #include "threads/vaddr.h"
@@ -37,6 +36,14 @@ struct mmap_file
     struct file *file;     /*매핑하는 파일 obj*/
     struct list_elem elem; /*스레드에서 mmap에 접근하기 위한 list*/
     struct list vme_list;  /* 해당하는 모든 vm_entry들의 list mmap_elem을 사용해서 접근*/
+};
+
+struct page
+{
+    void *kaddr;          /*페이지의 주소*/
+    struct vm_entry *vme; //
+    struct thread *thread;
+    struct list_elem lru;
 };
 
 void vm_init(struct hash *vm);
