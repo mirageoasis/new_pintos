@@ -43,7 +43,7 @@ struct page
     void *kaddr;          /*페이지의 주소*/
     struct vm_entry *vme; //
     struct thread *thread;
-    struct list_elem lru;
+    struct list_elem lru; /*lru list에 연결되기 위한 elem*/
 };
 
 void vm_init(struct hash *vm);
