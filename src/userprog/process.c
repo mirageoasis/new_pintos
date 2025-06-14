@@ -22,6 +22,9 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 
+#include "vm/frame.h"
+#include "vm/swap.h"
+
 #define MAX_ARG_COUNT UINT8_MAX
 
 static thread_func start_process NO_RETURN;
@@ -515,24 +518,21 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack(void **esp)
 {
-  uint8_t *kpage;
+  struct page *kpage;
   bool success = false;
 
-  if (!(kpage = palloc_get_page(PAL_USER | PAL_ZERO)))
-  {
-    return false;
-  }
+  kpage = alloc_page(PAL_USER | PAL_ZERO);
 
-  success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage, true);
+  success = install_page(((uint8_t *)PHYS_BASE) - PGSIZE, kpage->kaddr, true);
   if (success)
     *esp = PHYS_BASE;
   else
-    palloc_free_page(kpage);
+    free_page(kpage);
 
   struct vm_entry *vme;
   if ((vme = (struct vm_entry *)malloc(sizeof(struct vm_entry))) == NULL)
   {
-    palloc_free_page(kpage);
+    free_page(kpage);
     return false;
   }
 
@@ -540,11 +540,13 @@ setup_stack(void **esp)
   vme->writable = true;
   vme->type = VM_ANON;
   vme->is_loaded = true;
+  // 초기 주소 설정
+  kpage->vme = vme;
 
   if (!insert_vme(&(thread_current()->vm), vme))
   {
     free(vme);
-    palloc_free_page(kpage);
+    free_page(kpage);
     return false;
   }
 
@@ -664,7 +666,7 @@ void remove_child_process(struct thread *cp)
   // printf("removing child");
   // ASSERT(false);
   list_remove(&(cp->child_process_elem));
-  palloc_free_page(cp);
+  free_page(cp);
 }
 
 int process_add_file(struct file *f)
@@ -709,13 +711,14 @@ void process_close_file(int fd)
 bool handle_mm_fault(struct vm_entry *vme)
 {
   /* palloc_get_page()를 이용해서 물리메모리 할당 */
-  void *kaddr = palloc_get_page(PAL_USER);
+  struct page *kpage = alloc_page(PAL_USER);
   /* switch문으로 vm_entry의 타입별 처리 (VM_BIN외의 나머지 타입은 mmf와 swapping에서 다룸*/
+  kpage->vme = vme;
 
   if (vme->is_loaded)
     return false;
 
-  if (!kaddr)
+  if (!kpage)
     return false;
 
   switch (vme->type)
@@ -723,24 +726,24 @@ bool handle_mm_fault(struct vm_entry *vme)
   /* if vm_entry type is VM_BIN */
   case VM_BIN:
     /* try to load_file to physical memory if fail, free the physical memory */
-    if (!load_file(kaddr, vme))
+    if (!load_file(kpage->kaddr, vme))
     {
       printf("load_file error!(handle_mm_fault)\n");
-      palloc_free_page(kaddr);
+      free_page(kpage);
       return false;
     }
     break;
   /* if vm_entry type is VM_FILE */
   case VM_FILE:
-    if (!load_file(kaddr, vme))
+    if (!load_file(kpage->kaddr, vme))
     {
       printf("load_file error!(handle_mm_fault)\n");
-      palloc_free_page(kaddr);
+      free_page(kpage);
       return false;
     }
     break;
   case VM_ANON:
-    ASSERT(false);
+    swap_in(vme->swap_slot, kpage->kaddr);
     break;
   default:
     printf("vme->type is: %d\n", vme->type);
@@ -749,10 +752,10 @@ bool handle_mm_fault(struct vm_entry *vme)
   }
   /* install_page를 이용해서 물리페이지와 가상페이지 맵핑 */
 
-  if (!install_page(vme->vaddr, kaddr, vme->writable))
+  if (!install_page(vme->vaddr, kpage->kaddr, vme->writable))
   {
     printf("install page at handle_mm_fault failed!\n");
-    palloc_free_page(kaddr);
+    free_page(kpage);
     return false;
   }
   vme->is_loaded = true;
@@ -774,6 +777,7 @@ void do_munmap(struct mmap_file *mmap_file)
       file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
     }
     e = list_remove(e);
+    free_page(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
     delete_vme(&thread_current()->vm, vme);
   }
   /*remove from thread's list*/

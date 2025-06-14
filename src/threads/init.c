@@ -31,6 +31,10 @@
 #else
 #include "tests/threads/tests.h"
 #endif
+#ifdef VM
+#include "vm/swap.h"
+#include "vm/frame.h"
+#endif
 #ifdef FILESYS
 #include "devices/block.h"
 #include "devices/ide.h"
@@ -118,6 +122,11 @@ int main(void)
   thread_start();
   serial_init_queue();
   timer_calibrate();
+
+#ifdef VM
+  swap_init();
+  lru_list_init();
+#endif
 
 #ifdef FILESYS
   /* Initialize file system. */

@@ -1,7 +1,10 @@
-#include "vm/swap.h"
 #include "devices/block.h"
+
+#include "vm/swap.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+
+struct bitmap *swap_bitmap;
 
 const size_t BLOCK_PER_PAGE = PGSIZE / BLOCK_SECTOR_SIZE;
 
