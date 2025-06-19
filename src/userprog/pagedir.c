@@ -5,6 +5,7 @@
 #include "threads/init.h"
 #include "threads/pte.h"
 #include "threads/palloc.h"
+#include "threads/thread.h"
 
 static uint32_t *active_pd(void);
 static void invalidate_pagedir(uint32_t *);
@@ -56,6 +57,12 @@ static uint32_t *
 lookup_page(uint32_t *pd, const void *vaddr, bool create)
 {
   uint32_t *pt, *pde;
+
+  if (pd == NULL)
+  {
+    printf("[panic-debug] lookup_page called with pd == NULL by thread %s\n",
+           thread_current()->name);
+  }
 
   ASSERT(pd != NULL);
 

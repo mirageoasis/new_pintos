@@ -54,7 +54,7 @@ tid_t process_execute(const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create(parsed_file_name, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR)
-    palloc_free_page(fn_copy);
+    free_page(fn_copy);
   return tid;
 }
 
@@ -88,7 +88,7 @@ start_process(void *file_name_)
   ASSERT(cur->parent != NULL);
 
   /* If load failed, quit. */
-  palloc_free_page(file_name);
+  free_page(file_name);
   if (!success)
   {
     free(copy_file_name);
@@ -713,13 +713,9 @@ bool handle_mm_fault(struct vm_entry *vme)
   /* palloc_get_page()를 이용해서 물리메모리 할당 */
   struct page *kpage = alloc_page(PAL_USER);
   /* switch문으로 vm_entry의 타입별 처리 (VM_BIN외의 나머지 타입은 mmf와 swapping에서 다룸*/
-  kpage->vme = vme;
-
-  if (vme->is_loaded)
-    return false;
-
   if (!kpage)
     return false;
+  kpage->vme = vme;
 
   switch (vme->type)
   {
@@ -774,7 +770,9 @@ void do_munmap(struct mmap_file *mmap_file)
     struct vm_entry *vme = list_entry(e, struct vm_entry, mmap_elem);
     if (vme->is_loaded && pagedir_is_dirty(cur->pagedir, vme->vaddr))
     {
+      lock_acquire(&filesys_lock);
       file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+      lock_release(&filesys_lock);
     }
     e = list_remove(e);
     free_page(pagedir_get_page(thread_current()->pagedir, vme->vaddr));

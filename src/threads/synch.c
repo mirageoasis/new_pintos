@@ -31,6 +31,8 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "userprog/syscall.h"
+#include "vm/frame.h"
 
 /*
 user-defined function
@@ -182,7 +184,6 @@ sema_test_helper(void *sema_)
 void lock_init(struct lock *lock)
 {
   ASSERT(lock != NULL);
-
   lock->holder = NULL;
   sema_init(&lock->semaphore, 1);
 }
@@ -197,6 +198,7 @@ void lock_init(struct lock *lock)
    we need to sleep. */
 void lock_acquire(struct lock *lock)
 {
+
   ASSERT(lock != NULL);
   ASSERT(!intr_context());
   ASSERT(!lock_held_by_current_thread(lock));

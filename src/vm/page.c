@@ -2,6 +2,7 @@
 #include <hash.h>
 #include <string.h>
 #include "vm/page.h"
+#include "vm/frame.h"
 #include "filesys/file.h"
 #include "userprog/syscall.h"
 
@@ -46,7 +47,11 @@ bool delete_vme(struct hash *vm, struct vm_entry *vme)
         return false;
 
     target = hash_entry(e, struct vm_entry, elem);
-    hash_delete(vm, e);
+    if (!hash_delete(vm, e))
+    {
+        return false;
+    }
+    free_page(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
     free(target);
     return true;
 }
