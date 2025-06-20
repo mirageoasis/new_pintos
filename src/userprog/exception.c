@@ -159,9 +159,19 @@ page_fault(struct intr_frame *f)
    struct vm_entry *vme = find_vme(fault_addr);
    /* vm_entry를 인자로 넘겨주며 handle_mm_fault() 호출 */
    bool loaded;
-   if (!vme || !handle_mm_fault(vme))
+   /* 제대로 파일이 물리 메모리에 로드 되고 맵핑 됬는지 검사 */
+   if (!vme)
+   {
+      if (!verify_stack(fault_addr, f->esp))
+      {
+         exit(-1);
+      }
+      expand_stack(fault_addr);
+      return;
+   }
+
+   if (!handle_mm_fault(vme))
    {
       exit(-1);
    }
-   /* 제대로 파일이 물리 메모리에 로드 되고 맵핑 됬는지 검사 */
 }

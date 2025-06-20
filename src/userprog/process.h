@@ -19,4 +19,7 @@ bool handle_mm_fault(struct vm_entry *vme);
 
 void do_munmap(struct mmap_file *mmap_file);
 
+bool expand_stack(void *addr);
+bool verify_stack(void *fault_addr, void *esp);
+
 #endif /* userprog/process.h */

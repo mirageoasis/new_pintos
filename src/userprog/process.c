@@ -774,6 +774,7 @@ void do_munmap(struct mmap_file *mmap_file)
       file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
       lock_release(&filesys_lock);
     }
+    vme->is_loaded = false;
     e = list_remove(e);
     free_page(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
     delete_vme(&thread_current()->vm, vme);
@@ -781,4 +782,37 @@ void do_munmap(struct mmap_file *mmap_file)
   /*remove from thread's list*/
   list_remove(&(mmap_file->elem));
   free(mmap_file);
+}
+
+bool expand_stack(void *addr)
+{
+  struct page *kpage = alloc_page(PAL_USER | PAL_ZERO);
+  struct vm_entry *vme = malloc(sizeof(struct vm_entry));
+  if (vme == NULL)
+    return false;
+
+  vme->type = VM_ANON;
+  vme->vaddr = pg_round_down(addr);
+  vme->writable = true;
+  vme->is_loaded = true;
+  insert_vme(&thread_current()->vm, vme);
+  kpage->vme = vme;
+  // install_page()호출하여 페이지 테이블 설정
+  if (!install_page(vme->vaddr, kpage->kaddr, vme->writable))
+  {
+    free_page(kpage);
+    free(vme);
+    return false;
+  }
+
+  return true;
+}
+
+bool verify_stack(void *fault_addr, void *esp)
+{
+  const int MB = 1024 * 1024;
+
+  return is_user_vaddr(pg_round_down(fault_addr)) &&
+         fault_addr >= esp - 32 &&
+         fault_addr >= PHYS_BASE - MB * 8;
 }
